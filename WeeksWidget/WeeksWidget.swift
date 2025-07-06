@@ -47,15 +47,24 @@ struct Provider: TimelineProvider {
     
     // 获取所有图片元数据
     private func getImageMetadataList() -> [ImageMetadata] {
-        guard let metadataURL = getMetadataFileURL(),
-              FileManager.default.fileExists(atPath: metadataURL.path) else { return [] }
+        guard let metadataURL = getMetadataFileURL() else { 
+            print("Widget Log: 获取元数据文件URL失败")
+            return [] 
+        }
+        print("Widget Log: 元数据文件路径: \(metadataURL.path)")
+        
+        guard FileManager.default.fileExists(atPath: metadataURL.path) else { 
+            print("Widget Log: 元数据文件不存在")
+            return [] 
+        }
         
         do {
             let data = try Data(contentsOf: metadataURL)
             let metadataList = try JSONDecoder().decode([ImageMetadata].self, from: data)
+            print("Widget Log: 成功读取 \(metadataList.count) 条元数据")
             return metadataList.sorted { $0.order < $1.order }
         } catch {
-            print("读取元数据失败: \(error)")
+            print("Widget Log: 读取或解码元数据失败: \(error)")
             return []
         }
     }
@@ -112,9 +121,9 @@ struct Provider: TimelineProvider {
         var entries: [WeeksEntry] = []
         let currentDate = Date()
         
-        // 为每张图片创建一个条目，每隔一小时切换一次
+        // 为每张图片创建一个条目，每隔15分钟切换一次
         for (index, metadata) in metadataList.enumerated() {
-            let entryDate = Calendar.current.date(byAdding: .hour, value: index, to: currentDate)!
+            let entryDate = Calendar.current.date(byAdding: .minute, value: index * 15, to: currentDate)!
             let entry = WeeksEntry(date: entryDate, imageID: metadata.id, weekNumber: week, year: year)
             entries.append(entry)
         }
@@ -135,16 +144,28 @@ struct WeeksWidgetEntryView : View {
     
     // 获取图片
     private func loadImage(withID id: String) -> UIImage? {
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else { return nil }
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else { 
+            print("Widget Log: 获取共享容器URL失败")
+            return nil 
+        }
         
         let imagesDirectory = containerURL.appendingPathComponent("Images")
         let imageURL = imagesDirectory.appendingPathComponent("\(id).jpg")
+        print("Widget Log: 尝试加载图片路径: \(imageURL.path)")
         
         // 检查文件是否存在
-        guard FileManager.default.fileExists(atPath: imageURL.path),
-              let imageData = try? Data(contentsOf: imageURL),
-              let image = UIImage(data: imageData) else { return nil }
+        guard FileManager.default.fileExists(atPath: imageURL.path) else {
+            print("Widget Log: 图片文件不存在")
+            return nil
+        }
+              
+        guard let imageData = try? Data(contentsOf: imageURL),
+              let image = UIImage(data: imageData) else { 
+            print("Widget Log: 加载图片数据失败或图片数据损坏")
+            return nil 
+        }
         
+        print("Widget Log: 成功加载图片ID: \(id)")
         return image
     }
 
@@ -175,7 +196,6 @@ struct WeeksWidgetEntryView : View {
                                 .foregroundColor(.white.opacity(0.8))
                         }
                         .padding(8)
-                        .background(Color.black.opacity(0.3))
                         .cornerRadius(8)
                         
                         Spacer()
@@ -189,7 +209,7 @@ struct WeeksWidgetEntryView : View {
                         .font(.system(size: 40))
                         .foregroundColor(.white.opacity(0.6))
                     
-                    Text("添加图片到 Weeks App")
+                    Text("add photos")
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.8))
                 }

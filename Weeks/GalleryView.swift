@@ -145,7 +145,7 @@ struct GalleryView: View {
                     for item in selectedItems {
                         if let data = try? await item.loadTransferable(type: Data.self),
                            let image = UIImage(data: data),
-                           let cropped = ImageCropper.cropCenter(of: image, toAspectRatio: 2.0) {
+                           let cropped = ImageCropper.cropCenter(of: image, toAspectRatio: 2.13) {
                             results.append(cropped)
                         }
                     }
