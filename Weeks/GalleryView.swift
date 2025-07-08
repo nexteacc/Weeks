@@ -45,43 +45,52 @@ struct GalleryView: View {
                     .frame(width: screenWidth * 0.25)
                     .padding(.top, screenHeight / 3)
 
+                    // 右侧区域使用VStack布局
                     VStack(spacing: 0) {
-                        // 右侧清空按钮，与ADD按钮垂直对齐
-                        ZStack(alignment: .trailing) {
-                            // 占位，确保布局正确
-                            Rectangle()
-                                .fill(Color.clear)
-                                .frame(height: 20)
-                            
+                        // 顶部区域：清空按钮
+                        HStack {
+                            Spacer()
                             Button {
-                // 显示确认对话框
-                let alert = UIAlertController(title: "确认清空", message: "确定要清空所有图片吗？", preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-                alert.addAction(UIAlertAction(title: "确定", style: .destructive) { _ in
-                    // 清空所有图片
-                    _ = ImageManager.shared.clearAllImages()
-                    // 刷新所有图片
-                    let all = ImageManager.shared.getAllImages().map { $0.image }
-                    uiImages = all
-                    // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
-                    DispatchQueue.main.async {
-                        dismiss()
-                    }
-                })
-                // 显示对话框
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let rootViewController = windowScene.windows.first?.rootViewController {
-                    rootViewController.present(alert, animated: true)
-                }
-            } label: {
-                                Image(systemName: "trash.circle.fill")
-                                    .font(.title)
-                                    .foregroundColor(.red.opacity(0.7))
+                                // 显示确认对话框
+                                let alert = UIAlertController(title: "确认清空", message: "确定要清空所有图片吗？", preferredStyle: .alert)
+                                alert.addAction(UIAlertAction(title: "取消", style: .cancel))
+                                alert.addAction(UIAlertAction(title: "确定", style: .destructive) { _ in
+                                    // 清空所有图片
+                                    _ = ImageManager.shared.clearAllImages()
+                                    // 刷新所有图片
+                                    let all = ImageManager.shared.getAllImages().map { $0.image }
+                                    uiImages = all
+                                    // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                                    DispatchQueue.main.async {
+                                        dismiss()
+                                    }
+                                })
+                                // 显示对话框
+                                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                   let rootViewController = windowScene.windows.first?.rootViewController {
+                                    rootViewController.present(alert, animated: true)
+                                }
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.white)
+                                    .padding()
+                                    .frame(width: 30, height: 30)
+                                    .background(
+                                        Circle()
+                                            .fill(.black)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(.black, lineWidth: 2)
+                                            )
+                                    )
                             }
-                            .padding(.trailing, 20)
+                            Spacer()
                         }
+                        .padding(.top, 10)
+                        .padding(.bottom, 15) // 添加与图片区域的间距
                         
-                        // 图片滚动区域
+                        // 中间区域：图片滚动区域
                         ScrollView {
                             VStack(spacing: 0) {
                                 ForEach(Array(uiImages.enumerated()), id: \.offset) { (index, img) in
@@ -110,28 +119,39 @@ struct GalleryView: View {
                             .padding(.vertical, 20)
                         }
                         
-                        // 底部区域 - 居中的ADD按钮和数量提示
-                        VStack(spacing: 8) {
+                        // 底部区域：添加按钮和图片计数
+                        VStack(spacing: 10) {
+                            // 添加按钮
                             if !ImageManager.shared.isMaxImageCountReached() {
                                 HStack {
                                     Spacer()
                                     PhotosPicker(selection: $selectedItems, maxSelectionCount: 30 - uiImages.count, matching: .images) {
-                                        Text("ADD")
-                                            .font(.system(size: 16, weight: .medium))
+                                        Image(systemName: "plus")
+                                            .font(.system(size: 14))
                                             .foregroundColor(.white)
-                                            .frame(width: 100, height: 44)
-                                            .background(Color.blue)
-                                            .cornerRadius(22)
+                                            .padding()
+                                            .frame(width: 50, height: 20)
+                                            .background(
+                                                RoundedRectangle(cornerRadius: 12)
+                                                    .fill(.black)
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 12)
+                                                            .stroke(.black, lineWidth: 2)
+                                                    )
+                                            )
                                     }
                                     Spacer()
                                 }
+                                .padding(.top, 15) // 添加与图片区域的间距
                             }
                             
+                            // 图片计数
                             Text("\(uiImages.count) / 30")
                                 .foregroundColor(.gray)
                                 .font(.caption)
+                                .padding(.bottom, 30)
+                                .frame(maxWidth: .infinity, alignment: .center)
                         }
-                        .padding(.bottom, 30)
                     }
                 }
             }

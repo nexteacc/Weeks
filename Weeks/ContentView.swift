@@ -90,8 +90,6 @@ struct ContentView: View {
                         if uiImages.isEmpty {
                             hasAddedImages = false
                         }
-                        // 确保从Gallery返回后不会再次自动导航
-                        isInitialLaunch = false
                     }
             }
             .onAppear {

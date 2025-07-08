@@ -18,6 +18,13 @@ struct WeeksApp: App {
         WindowGroup {
             ContentView(hasAddedImages: hasAddedImages)
                 .preferredColorScheme(.light)
+                .onAppear {
+                    // 当应用启动时，确保hasAddedImages状态与实际图片状态一致
+                    let hasImages = !ImageManager.shared.getAllImages().isEmpty
+                    if hasAddedImages != hasImages {
+                        hasAddedImages = hasImages
+                    }
+                }
         }
     }
 }
