@@ -21,7 +21,10 @@ struct GalleryView: View {
                 Text("暂无图片")
                     .foregroundColor(.gray)
                     .onAppear {
-                        dismiss()
+                        // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                        DispatchQueue.main.async {
+                            dismiss()
+                        }
                     }
             }
         } else {
@@ -60,7 +63,10 @@ struct GalleryView: View {
                     // 刷新所有图片
                     let all = ImageManager.shared.getAllImages().map { $0.image }
                     uiImages = all
-                    dismiss()
+                    // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                    DispatchQueue.main.async {
+                        dismiss()
+                    }
                 })
                 // 显示对话框
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -86,8 +92,17 @@ struct GalleryView: View {
                                              let imageID = allImages[index].metadata.id
                                              _ = ImageManager.shared.deleteImage(withID: imageID)
                                              // 刷新所有图片
-                                             let all = ImageManager.shared.getAllImages().map { $0.image }
-                                             uiImages = all
+                                             DispatchQueue.main.async {
+                                                 let all = ImageManager.shared.getAllImages().map { $0.image }
+                                                 uiImages = all
+                                                 
+                                                 // 如果删除后没有图片了，返回首页
+                                                 if all.isEmpty {
+                                                     DispatchQueue.main.async {
+                                                         dismiss()
+                                                     }
+                                                 }
+                                             }
                                          }
                                      })
                                 }
@@ -126,7 +141,10 @@ struct GalleryView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        dismiss()
+                        // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                        DispatchQueue.main.async {
+                            dismiss()
+                        }
                     } label: {
                         Image(systemName: "chevron.left")
                             .font(.title3)
@@ -136,8 +154,10 @@ struct GalleryView: View {
             }
             .onAppear {
                 // 页面加载时同步所有图片
-                let all = ImageManager.shared.getAllImages().map { $0.image }
-                uiImages = all
+                DispatchQueue.main.async {
+                    let all = ImageManager.shared.getAllImages().map { $0.image }
+                    uiImages = all
+                }
             }
             .onChange(of: selectedItems) {
                 Task {
@@ -152,8 +172,10 @@ struct GalleryView: View {
                     if !results.isEmpty {
                         _ = ImageManager.shared.saveImages(results)
                         // 刷新所有图片
-                        let all = ImageManager.shared.getAllImages().map { $0.image }
-                        uiImages = all
+                        DispatchQueue.main.async {
+                            let all = ImageManager.shared.getAllImages().map { $0.image }
+                            uiImages = all
+                        }
                     }
                     selectedItems = []
                 }
@@ -172,7 +194,7 @@ struct GalleryImageCard: View {
             let cardMidY = geo.frame(in: .global).midY
             let scrollMidY = geo.size.height / 2
             let normalized = (cardMidY - scrollMidY) / geo.size.height
-            let rotationAngle = Double(normalized * 60)
+            let rotationAngle = Double(normalized * 45)
             let scale = max(1 - abs(normalized) * 0.2, 0.8)
             // 完全不透明显示图片，保留3D效果但不影响图片清晰度
             let opacity = 1.0

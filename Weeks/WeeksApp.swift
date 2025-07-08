@@ -6,12 +6,19 @@
 //
 
 import SwiftUI
+import UIKit
+import WidgetKit
 
 @main
 struct WeeksApp: App {
+    // 应用状态管理
+    @AppStorage("hasAddedImages") private var hasAddedImages = false
+    
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(hasAddedImages: hasAddedImages)
+                .preferredColorScheme(.light)
         }
     }
 }
+

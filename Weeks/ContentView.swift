@@ -10,6 +10,22 @@ struct ContentView: View {
     
     // 自动播放相关状态
     @State private var autoPlayTimer: AnyCancellable?
+    
+    // 是否已添加过图片的标志
+    @AppStorage("hasAddedImages") private var hasAddedImages = false
+    
+    // 标记是否是应用启动时的初始化，用于区分是否需要自动导航
+    @State private var isInitialLaunch: Bool
+    
+    // 初始化方法，接收hasAddedImages参数
+    init(hasAddedImages: Bool = false) {
+        // 如果传入了hasAddedImages参数为true，则更新@AppStorage的值
+        if hasAddedImages {
+            UserDefaults.standard.set(true, forKey: "hasAddedImages")
+        }
+        // 初始化时标记为应用启动
+        self._isInitialLaunch = State(initialValue: true)
+    }
    
     private let logoNames = [
         "dog",
@@ -26,7 +42,7 @@ struct ContentView: View {
             VStack(spacing: 40) {
                 Spacer()
                 
-                // 这里已删除播放器控制界面
+           
                 
                 Image(logoNames[currentLogoIndex])
                     .resizable()
@@ -35,7 +51,7 @@ struct ContentView: View {
                     .gesture(
                         DragGesture()
                             .onChanged { _ in
-                                // 拖动时暂停自动播放
+                
                                 stopAutoPlay()
                             }
                             .onEnded { value in
@@ -45,14 +61,15 @@ struct ContentView: View {
                                     currentLogoIndex = (currentLogoIndex - 1 + logoNames.count) % logoNames.count
                                 }
                                 
-                                // 拖动结束后恢复自动播放
+               
                                 startAutoPlay()
                             }
                     )
                     .animation(.easeInOut, value: currentLogoIndex)
 
                 PhotosPicker(selection: $selectedItems, maxSelectionCount: 30, matching: .images) {
-                    Text("Choose Photos")
+                    Image(systemName: "plus")
+                        .font(.system(size: 40))
                         .foregroundColor(.black)
                         .padding()
                         .frame(width: 200, height: 280)
@@ -65,20 +82,48 @@ struct ContentView: View {
 
                 Spacer()
             }
-            // 使用新版 navigationDestination 替代过时的 NavigationLink
+
             .navigationDestination(isPresented: $navigateToGallery) {
                 GalleryView(uiImages: $uiImages)
+                    .onDisappear {
+                        // 当GalleryView消失时，确保状态正确更新
+                        if uiImages.isEmpty {
+                            hasAddedImages = false
+                        }
+                        // 确保从Gallery返回后不会再次自动导航
+                        isInitialLaunch = false
+                    }
             }
             .onAppear {
-                // 页面加载时同步所有图片
+                // 加载所有图片
                 let all = ImageManager.shared.getAllImages().map { $0.image }
                 uiImages = all
                 
-                // 启动自动播放
+                // 更新hasAddedImages状态
+                if !all.isEmpty {
+                    hasAddedImages = true
+                } else {
+                    hasAddedImages = false
+                }
+                
+                // 只在应用启动时且有图片时自动导航到Gallery页面
+                if isInitialLaunch && hasAddedImages && !all.isEmpty {
+                    // 使用DispatchQueue.main.async确保在UI更新完成后设置导航状态
+                    DispatchQueue.main.async {
+                        navigateToGallery = true
+                        // 导航后标记不再是初始启动
+                        isInitialLaunch = false
+                    }
+                } else {
+                    // 如果不是初始启动或没有图片，确保导航状态为false
+                    navigateToGallery = false
+                    isInitialLaunch = false
+                }
+                
                 startAutoPlay()
             }
             .onDisappear {
-                // 页面消失时停止自动播放
+
                 stopAutoPlay()
             }
             .onChange(of: selectedItems) { _, _ in
@@ -92,12 +137,21 @@ struct ContentView: View {
                         }
                     }
                     if !results.isEmpty {
-                        // 通过ImageManager批量保存
+                        // 保存图片
                         _ = ImageManager.shared.saveImages(results)
-                        // 刷新所有图片
+
+                        // 更新图片列表
                         let all = ImageManager.shared.getAllImages().map { $0.image }
                         uiImages = all
-                        navigateToGallery = true
+                        
+                        // 设置已添加图片标志
+                        hasAddedImages = true
+                        
+                        // 使用DispatchQueue.main.async确保在UI更新完成后设置导航状态
+                        DispatchQueue.main.async {
+                            // 导航到Gallery页面
+                            navigateToGallery = true
+                        }
                     }
                     selectedItems = []
                 }
@@ -105,11 +159,11 @@ struct ContentView: View {
         }
     }
     
-    // 启动自动播放
+
     private func startAutoPlay() {
-        stopAutoPlay() // 先停止现有定时器
+        stopAutoPlay() 
         
-        autoPlayTimer = Timer.publish(every: 3.0, on: .main, in: .common)
+        autoPlayTimer = Timer.publish(every: 2.5, on: .main, in: .common)
             .autoconnect()
             .sink { _ in
                 withAnimation(.easeInOut) {
@@ -118,7 +172,7 @@ struct ContentView: View {
             }
     }
     
-    // 停止自动播放
+
     private func stopAutoPlay() {
         autoPlayTimer?.cancel()
         autoPlayTimer = nil
