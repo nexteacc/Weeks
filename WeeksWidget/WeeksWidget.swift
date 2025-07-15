@@ -158,14 +158,29 @@ struct WeeksWidgetEntryView : View {
             print("Widget Log: 图片文件不存在")
             return nil
         }
-              
+        
+        // 验证文件完整性：检查文件大小和可读性
+        guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
+              let fileSize = fileAttributes[.size] as? Int64,
+              fileSize > 0 else {
+            print("Widget Log: 图片文件大小无效")
+            return nil
+        }
+        
+        // 尝试读取文件数据
         guard let imageData = try? Data(contentsOf: imageURL),
-              let image = UIImage(data: imageData) else { 
-            print("Widget Log: 加载图片数据失败或图片数据损坏")
+              imageData.count > 0 else { 
+            print("Widget Log: 加载图片数据失败")
             return nil 
         }
         
-        print("Widget Log: 成功加载图片ID: \(id)")
+        // 验证数据完整性：确保可以创建UIImage
+        guard let image = UIImage(data: imageData) else {
+            print("Widget Log: 图片数据损坏，无法创建UIImage")
+            return nil
+        }
+        
+        print("Widget Log: 成功加载图片ID: \(id), 文件大小: \(imageData.count) bytes")
         return image
     }
 

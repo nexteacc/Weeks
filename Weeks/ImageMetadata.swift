@@ -77,6 +77,16 @@ class ImageManager {
         
         do {
             try imageData.write(to: imageURL)
+            
+            // 验证文件完整性：确保文件存在且大小正确
+            guard FileManager.default.fileExists(atPath: imageURL.path),
+                  let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
+                  let fileSize = fileAttributes[.size] as? Int64,
+                  fileSize == imageData.count else {
+                print("图片文件写入验证失败")
+                return nil
+            }
+            
         } catch {
             print("保存图片失败: \(error)")
             return nil
@@ -92,10 +102,15 @@ class ImageManager {
         metadataList.append(newMetadata)
         
         // 保存更新后的元数据
-        _ = saveImageMetadataList(metadataList)
+        guard saveImageMetadataList(metadataList) else {
+            print("保存元数据失败")
+            return nil
+        }
         
-        // 刷新 Widget
-        WidgetCenter.shared.reloadAllTimelines()
+        // 延迟刷新Widget，确保文件系统操作完成
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
         
         return imageID
     }
@@ -105,7 +120,8 @@ class ImageManager {
         var savedIDs: [String] = []
         
         for image in images {
-            if let id = saveImage(image) {
+            // 使用内部保存方法，不刷新Widget
+            if let id = saveImageWithoutReload(image) {
                 savedIDs.append(id)
             }
             
@@ -115,7 +131,65 @@ class ImageManager {
             }
         }
         
+        // 批量保存完成后，统一刷新Widget
+        if !savedIDs.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+        
         return savedIDs
+    }
+    
+    // 内部保存方法：不刷新Widget
+    private func saveImageWithoutReload(_ image: UIImage) -> String? {
+        // 检查是否达到最大数量限制
+        if getImageMetadataList().count >= maxImageCount {
+            return nil
+        }
+        
+        // 生成 UUID
+        let imageID = UUID().uuidString
+        
+        // 保存图片文件
+        guard let imagesDirectory = getImagesDirectoryURL(),
+              let imageData = image.jpegData(compressionQuality: 0.8) else { return nil }
+        
+        let imageURL = imagesDirectory.appendingPathComponent("\(imageID).jpg")
+        
+        do {
+            try imageData.write(to: imageURL)
+            
+            // 验证文件完整性：确保文件存在且大小正确
+            guard FileManager.default.fileExists(atPath: imageURL.path),
+                  let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
+                  let fileSize = fileAttributes[.size] as? Int64,
+                  fileSize == imageData.count else {
+                print("图片文件写入验证失败")
+                return nil
+            }
+            
+        } catch {
+            print("保存图片失败: \(error)")
+            return nil
+        }
+        
+        // 更新元数据
+        var metadataList = getImageMetadataList()
+        let newMetadata = ImageMetadata(
+            id: imageID,
+            addedDate: Date(),
+            order: metadataList.count
+        )
+        metadataList.append(newMetadata)
+        
+        // 保存更新后的元数据
+        guard saveImageMetadataList(metadataList) else {
+            print("保存元数据失败")
+            return nil
+        }
+        
+        return imageID
     }
     
     // 删除图片
@@ -149,8 +223,10 @@ class ImageManager {
         // 保存更新后的元数据
         _ = saveImageMetadataList(metadataList)
         
-        // 刷新 Widget
-        WidgetCenter.shared.reloadAllTimelines()
+        // 延迟刷新Widget，确保文件系统操作完成
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
         
         return true
     }
@@ -177,8 +253,10 @@ class ImageManager {
         // 清空元数据
         _ = saveImageMetadataList([])
         
-        // 刷新 Widget
-        WidgetCenter.shared.reloadAllTimelines()
+        // 延迟刷新Widget，确保文件系统操作完成
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            WidgetCenter.shared.reloadAllTimelines()
+        }
         
         return true
     }
