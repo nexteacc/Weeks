@@ -75,13 +75,13 @@ struct GalleryView: View {
                                     .font(.system(size: 14))
                                     .foregroundColor(.white)
                                     .padding()
-                                    .frame(width: 30, height: 30)
+                                    .frame(width: 38, height: 38)
                                     .background(
                                         Circle()
-                                            .fill(.black)
+                                            .fill(.blue)
                                             .overlay(
                                                 Circle()
-                                                    .stroke(.black, lineWidth: 2)
+                                                    .stroke(.blue, lineWidth: 2)
                                             )
                                     )
                             }
@@ -130,13 +130,13 @@ struct GalleryView: View {
                                             .font(.system(size: 14))
                                             .foregroundColor(.white)
                                             .padding()
-                                            .frame(width: 50, height: 20)
+                                            .frame(width: 50, height: 30)
                                             .background(
                                                 RoundedRectangle(cornerRadius: 12)
-                                                    .fill(.black)
+                                                    .fill(.blue)
                                                     .overlay(
                                                         RoundedRectangle(cornerRadius: 12)
-                                                            .stroke(.black, lineWidth: 2)
+                                                            .stroke(.blue, lineWidth: 2)
                                                     )
                                             )
                                     }
