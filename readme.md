@@ -153,3 +153,27 @@
 
 ------
 
+最终图片处理流程，举例说明
+
+  完整处理管道:
+
+  原始图片 (3024×4032, 12M像素)
+      ↓ PhotosPicker加载
+  UIImage创建 (scale=1.0)
+      ↓ ImageCropper.cropCenter()
+  裁剪比例 (3024×1420, 4.3M像素)
+      ↓ resizeForWidget()
+  检查限制 (4.3M > 1.9M, 需要缩放)
+      ↓ 计算缩放因子
+  智能缩放 (factor=0.665)
+      ↓ UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0) 
+  最终输出 (944×2011, 1.9M像素)
+      ↓ 保存到App Groups
+  Widget安全显示 ✅
+
+  关键技术参数:
+
+  - Widget安全限制: 1,900,000像素 (iOS限制的90%)
+  - 目标宽高比: 2.13:1 (Medium Widget规格)
+  - Graphics Scale: 1.0 (强制点像素1:1对应)
+  - 质量平衡: 压缩质量0.8 + 智能缩放

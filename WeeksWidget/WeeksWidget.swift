@@ -134,6 +134,20 @@ struct Provider: TimelineProvider {
     }
 }
 
+// Widget 定义
+struct WeeksWidget: Widget {
+    let kind: String = "WeeksWidget"
+    
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            WeeksWidgetEntryView(entry: entry)
+        }
+        .configurationDisplayName("Weeks")
+        .description("显示每周精选图片")
+        .supportedFamilies([.systemMedium])
+    }
+}
+
 // Widget 视图
 struct WeeksWidgetEntryView : View {
     var entry: Provider.Entry
@@ -144,9 +158,9 @@ struct WeeksWidgetEntryView : View {
     
     // 获取图片
     private func loadImage(withID id: String) -> UIImage? {
-        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else { 
+        guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
             print("Widget Log: 获取共享容器URL失败")
-            return nil 
+            return nil
         }
         
         let imagesDirectory = containerURL.appendingPathComponent("Images")
@@ -169,9 +183,9 @@ struct WeeksWidgetEntryView : View {
         
         // 尝试读取文件数据
         guard let imageData = try? Data(contentsOf: imageURL),
-              imageData.count > 0 else { 
+              imageData.count > 0 else {
             print("Widget Log: 加载图片数据失败")
-            return nil 
+            return nil
         }
         
         // 验证数据完整性：确保可以创建UIImage
@@ -183,42 +197,32 @@ struct WeeksWidgetEntryView : View {
         print("Widget Log: 成功加载图片ID: \(id), 文件大小: \(imageData.count) bytes")
         return image
     }
-
+    
     var body: some View {
         ZStack {
-            // 背景
-            Color.black
-            
-            if let imageID = entry.imageID, let uiImage = loadImage(withID: imageID) {
-                // 显示图片
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipped()
-                
-                // 显示周数和年份
-                VStack {
-                    Spacer()
-                    HStack {
-                        VStack(alignment: .leading) {
-                            Text("\(entry.year)")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundColor(.white)
-                            
-                            Text("Week \(entry.weekNumber)")
-                                .font(.system(size: 12))
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                        .padding(8)
-                        .cornerRadius(8)
+            // 显示周数和年份
+            VStack {
+                Spacer()
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("\(entry.year)")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundColor(.white)
                         
-                        Spacer()
+                        Text("Week \(entry.weekNumber)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.white.opacity(0.8))
                     }
-                    .padding(12)
+                    .padding(8)
+                    .cornerRadius(8)
+                    
+                    Spacer()
                 }
-            } else {
-                // 无图片时显示提示
+                .padding(12)
+            }
+            
+            // 无图片时显示提示
+            if entry.imageID == nil {
                 VStack(spacing: 10) {
                     Image(systemName: "photo")
                         .font(.system(size: 40))
@@ -230,28 +234,15 @@ struct WeeksWidgetEntryView : View {
                 }
             }
         }
+        .containerBackground(for: .widget) {
+            if let imageID = entry.imageID, let uiImage = loadImage(withID: imageID) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.black
+            }
+        }
         .widgetURL(URL(string: "weeksWidget://openApp"))
     }
 }
-
-// Widget 定义
-struct WeeksWidget: Widget {
-    let kind: String = "WeeksWidget"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            if #available(macOS 14.0, iOS 17.0, *) {
-                WeeksWidgetEntryView(entry: entry)
-                    .containerBackground(.black, for: .widget)
-            } else {
-                WeeksWidgetEntryView(entry: entry)
-                    .padding(0)
-                    .background(Color.black)
-            }
-        }
-        .configurationDisplayName("Weeks")
-        .description("显示每周精选图片")
-        .supportedFamilies([.systemMedium])
-    }
-}
-
