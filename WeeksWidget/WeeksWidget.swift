@@ -200,27 +200,6 @@ struct WeeksWidgetEntryView : View {
     
     var body: some View {
         ZStack {
-            // 显示周数和年份
-            VStack {
-                Spacer()
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("\(entry.year)")
-                            .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.white)
-                        
-                        Text("Week \(entry.weekNumber)")
-                            .font(.system(size: 12))
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    .padding(8)
-                    .cornerRadius(8)
-                    
-                    Spacer()
-                }
-                .padding(12)
-            }
-            
             // 无图片时显示提示
             if entry.imageID == nil {
                 VStack(spacing: 10) {

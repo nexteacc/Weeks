@@ -214,7 +214,7 @@ struct GalleryImageCard: View {
             let cardMidY = geo.frame(in: .global).midY
             let scrollMidY = geo.size.height / 2
             let normalized = (cardMidY - scrollMidY) / geo.size.height
-            let rotationAngle = Double(normalized * 45)
+            let rotationAngle = Double(normalized * 20)
             let scale = max(1 - abs(normalized) * 0.2, 0.8)
             // 完全不透明显示图片，保留3D效果但不影响图片清晰度
             let opacity = 1.0
