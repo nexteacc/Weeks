@@ -15,7 +15,82 @@ struct GalleryView: View {
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var isPawAnimating = false
     @State private var animationProgress: CGFloat = 0
+    @State private var currentYear: Int = Calendar.current.component(.year, from: Date())
+    @State private var remainingWeeks: Int = 0
+    @State private var updateTimer: Timer? = nil
     @Environment(\.dismiss) private var dismiss
+    
+    // Calculate remaining weeks in the year (full weeks + partial week)
+    private func calculateRemainingWeeks() -> Int {
+        let calendar = Calendar.current
+        let today = Date()
+        
+        // Calculate the last day of current year
+        var components = DateComponents()
+        components.year = calendar.component(.year, from: today)
+        components.month = 12
+        components.day = 31
+        
+        guard let lastDay = calendar.date(from: components) else { return 0 }
+        
+        // If today is the last day of the year, return 0
+        if calendar.isDate(today, inSameDayAs: lastDay) {
+            return 0
+        }
+        
+        // Get the end date of current week
+        guard let weekRange = calendar.dateInterval(of: .weekOfYear, for: today) else { return 0 }
+        let weekEnd = calendar.date(byAdding: .second, value: -1, to: weekRange.end)!
+        
+        // If the year ends within current week, return 0
+        if calendar.compare(lastDay, to: weekEnd, toGranularity: .day) != .orderedDescending {
+            return 0
+        }
+        
+        // Calculate days from next week start to year end
+        let nextWeekStart = calendar.date(byAdding: .second, value: 1, to: weekEnd)!
+        let daysFromNextWeek = calendar.dateComponents([.day], from: nextWeekStart, to: lastDay).day ?? 0 + 1
+        
+        // Calculate full weeks and remaining days
+        let fullWeeks = daysFromNextWeek / 7
+        let remainingDays = daysFromNextWeek % 7
+        
+        // Total remaining weeks = full weeks + (1 if there are remaining days)
+        return fullWeeks + (remainingDays > 0 ? 1 : 0)
+    }
+    
+    // Update date information
+    private func updateDateInfo() {
+        currentYear = Calendar.current.component(.year, from: Date())
+        remainingWeeks = calculateRemainingWeeks()
+    }
+    
+    // Setup timer to update at midnight
+    private func setupMidnightTimer() {
+        // Cancel existing timer
+        updateTimer?.invalidate()
+        
+        // Calculate next midnight
+        let calendar = Calendar.current
+        var components = DateComponents()
+        components.hour = 0
+        components.minute = 0
+        components.second = 0
+        
+        guard let tomorrow = calendar.nextDate(after: Date(), matching: components, matchingPolicy: .nextTime) else {
+            return
+        }
+        
+        // Calculate time interval until midnight
+        let timeInterval = tomorrow.timeIntervalSince(Date())
+        
+        // Setup timer
+        updateTimer = Timer.scheduledTimer(withTimeInterval: timeInterval, repeats: false) { [self] _ in
+            updateDateInfo()
+            // Setup next midnight timer
+            setupMidnightTimer()
+        }
+    }
 
     var body: some View {
         if uiImages.isEmpty {
@@ -37,9 +112,9 @@ struct GalleryView: View {
                 HStack(spacing: 0) {
                     VStack(alignment: .center, spacing: 4) {
                         Spacer()
-                        Text("2025")
+                        Text("\(currentYear)")
                             .font(.system(size: 28, weight: .bold))
-                        Text("Week 27")
+                        Text("Week \(remainingWeeks)")
                             .font(.system(size: 18))
                             .foregroundColor(.gray)
                         Spacer(minLength: screenHeight * 2/3)
@@ -167,11 +242,20 @@ struct GalleryView: View {
                 }
             }
             .onAppear {
-                // 页面加载时同步所有图片
+                // Update date information
+                updateDateInfo()
+                setupMidnightTimer()
+                
+                // Sync all images when page loads
                 DispatchQueue.main.async {
                     let all = ImageManager.shared.getAllImages().map { $0.image }
                     uiImages = all
                 }
+            }
+            .onDisappear {
+                // Clean up timer when view disappears
+                updateTimer?.invalidate()
+                updateTimer = nil
             }
             .onChange(of: selectedItems) {
                 Task {

@@ -35,8 +35,6 @@ struct ImageMetadata: Codable {
 struct WeeksEntry: TimelineEntry {
     let date: Date
     let imageID: String?
-    let weekNumber: Int
-    let year: Int
     let widgetFamily: WidgetFamily // Widget 尺寸
 }
 
@@ -100,19 +98,11 @@ struct Provider: TimelineProvider {
         return imagesDirectory.appendingPathComponent("\(id).jpg")
     }
     
-    // 获取当前周数和年份
-    private func getCurrentWeekAndYear() -> (week: Int, year: Int) {
-        let calendar = Calendar.current
-        let today = Date()
-        let weekOfYear = calendar.component(.weekOfYear, from: today)
-        let year = calendar.component(.year, from: today)
-        return (week: weekOfYear, year: year)
-    }
+    // 已删除获取当前周数和年份的方法，因为不再需要
     
     // 提供占位符条目
     func placeholder(in context: Context) -> WeeksEntry {
-        let (week, year) = getCurrentWeekAndYear()
-        return WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
+        return WeeksEntry(date: Date(), imageID: nil, widgetFamily: context.family)
     }
 
     // 提供快照条目
@@ -120,13 +110,12 @@ struct Provider: TimelineProvider {
         // 根据 Widget 尺寸获取对应的元数据列表
         let sizeType = getWidgetSizeType(for: context.family)
         let metadataList = getImageMetadataList(for: sizeType)
-        let (week, year) = getCurrentWeekAndYear()
         
         if let firstMetadata = metadataList.first {
-            let entry = WeeksEntry(date: Date(), imageID: firstMetadata.id, weekNumber: week, year: year, widgetFamily: context.family)
+            let entry = WeeksEntry(date: Date(), imageID: firstMetadata.id, widgetFamily: context.family)
             completion(entry)
         } else {
-            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
+            let entry = WeeksEntry(date: Date(), imageID: nil, widgetFamily: context.family)
             completion(entry)
         }
     }
@@ -136,14 +125,13 @@ struct Provider: TimelineProvider {
         // 根据 Widget 尺寸获取对应的元数据列表
         let sizeType = getWidgetSizeType(for: context.family)
         let metadataList = getImageMetadataList(for: sizeType)
-        let (week, year) = getCurrentWeekAndYear()
         
         // 验证元数据和文件的一致性
         let validatedMetadataList = validateImageMetadata(metadataList, for: sizeType)
         
         // 如果没有图片，返回空条目
         if validatedMetadataList.isEmpty {
-            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
+            let entry = WeeksEntry(date: Date(), imageID: nil, widgetFamily: context.family)
             let timeline = Timeline(entries: [entry], policy: .atEnd)
             completion(timeline)
             return
@@ -156,7 +144,7 @@ struct Provider: TimelineProvider {
         // 为每张图片创建一个条目，每隔15分钟切换一次
         for (index, metadata) in validatedMetadataList.enumerated() {
             let entryDate = Calendar.current.date(byAdding: .minute, value: index * 15, to: currentDate)!
-            let entry = WeeksEntry(date: entryDate, imageID: metadata.id, weekNumber: week, year: year, widgetFamily: context.family)
+            let entry = WeeksEntry(date: entryDate, imageID: metadata.id, widgetFamily: context.family)
             entries.append(entry)
         }
         
