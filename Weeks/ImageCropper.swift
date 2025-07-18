@@ -20,6 +20,26 @@ struct ImageCropper {
     /// Widget安全的最大像素面积（约为iOS限制的90%）
     private static let maxWidgetPixelArea: CGFloat = 1900000 // ~1378x1378
     
+    /// 不同尺寸的宽高比
+    static let mediumAspectRatio: CGFloat = 2.13
+    static let largeAspectRatio: CGFloat = 1.0
+    
+    /// 根据 Widget 尺寸类型获取对应的宽高比
+    static func aspectRatio(for sizeType: WidgetSizeType) -> CGFloat {
+        switch sizeType {
+        case .medium:
+            return mediumAspectRatio
+        case .large:
+            return largeAspectRatio
+        }
+    }
+    
+    /// 根据 Widget 尺寸类型裁剪图片
+    static func cropCenter(of image: UIImage, for sizeType: WidgetSizeType) -> UIImage? {
+        let targetRatio = aspectRatio(for: sizeType)
+        return cropCenter(of: image, toAspectRatio: targetRatio)
+    }
+    
     /// 裁剪并缩放UIImage到指定宽高比例，同时确保Widget兼容性
     static func cropCenter(of image: UIImage, toAspectRatio ratio: CGFloat) -> UIImage? {
         let originalSize = image.size

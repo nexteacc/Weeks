@@ -28,7 +28,7 @@
 | ✅ 裁剪逻辑      | 固定中尺寸 Widget 比例                                 |
 | ✅ 文件存储      | 裁剪图保存至 App Group，命名为 UUID.jpg                |
 | ✅ metadata 管理 | 使用 JSON 记录添加时间、顺序等                         |
-| ✅ 删除单张图片  | 长按图片卡片删除，并更新 metadata 与缓存               |
+
 | ✅ 清空全部图片  | 一键清空所有图片，立即刷新 Widget                      |
 | ✅ 数量限制      | 限制最多添加 30 张图片，超限后按钮置灰，显示 “30 / 30” |
 | ✅ 权限处理      | 友好提示照片访问权限引导到系统设置                     |
@@ -95,7 +95,7 @@
 | 元素                    | 类型                       | 操作         | 实现函数                                     |
 | ----------------------- | -------------------------- | ------------ | -------------------------------------------- |
 | 图片卡片                | `ScrollView + VStack + ForEach` | 展示每张图片，带3D旋转效果 | `getAllImages()`：从 ImageManager 中加载        |
-| 图片卡片（长按）        | `contextMenu`              | 弹出删除菜单 | `deleteImage(withID:)` 并刷新 UI 和 metadata     |
+
 | 图片数量提示（11 / 30） | Text                       | 动态展示     | `uiImages.count / 30`：直接显示当前数量   |
 | 「添加图片」按钮        | PhotosPicker              | 打开系统相册 | `PhotosPicker(selection:)` → 裁剪保存并刷新      |
 | 「添加图片」按钮置灰    | 条件渲染                   | 达上限隐藏   | `if !ImageManager.shared.isMaxImageCountReached()`              |
@@ -131,8 +131,7 @@
 [浏览页 - GalleryView]
  ├── 图片卡片展示（3D旋转效果）
  │     → getAllImages() 从 ImageManager 中加载
- ├── 图片卡片长按删除（contextMenu）
- │     → deleteImage(withID:) + 刷新UI
+
  ├── 清空全部图片按钮（带确认对话框）
  │     → clearAllImages() + 刷新UI
  ├── 添加图片按钮（居中显示）

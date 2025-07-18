@@ -8,11 +8,27 @@
 import WidgetKit
 import SwiftUI
 
+// Widget 尺寸类型枚举（与App中保持一致）
+enum WidgetSizeType: String, Codable {
+    case medium
+    case large
+}
+
 // 图片元数据结构（与App中保持一致）
 struct ImageMetadata: Codable {
     let id: String // UUID 字符串
     let addedDate: Date // 添加时间
     let order: Int // 顺序号
+    let sizeType: WidgetSizeType? // Widget 尺寸类型，兼容旧版本，可为 nil
+    
+    // 兼容旧版本的初始化方法
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        addedDate = try container.decode(Date.self, forKey: .addedDate)
+        order = try container.decode(Int.self, forKey: .order)
+        sizeType = try container.decodeIfPresent(WidgetSizeType.self, forKey: .sizeType)
+    }
 }
 
 // Widget 时间条目
@@ -21,6 +37,7 @@ struct WeeksEntry: TimelineEntry {
     let imageID: String?
     let weekNumber: Int
     let year: Int
+    let widgetFamily: WidgetFamily // Widget 尺寸
 }
 
 // Widget 提供者
@@ -33,21 +50,36 @@ struct Provider: TimelineProvider {
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
     }
     
-    // 获取图片存储目录
+    // 获取图片存储目录（根据尺寸类型）
+    private func getImagesDirectoryURL(for sizeType: WidgetSizeType) -> URL? {
+        guard let containerURL = getSharedContainerURL() else { return nil }
+        return containerURL.appendingPathComponent("Images/\(sizeType.rawValue)", isDirectory: true)
+    }
+    
+    // 兼容旧版本的方法，默认获取 medium 尺寸的目录
     private func getImagesDirectoryURL() -> URL? {
-        guard let containerURL = getSharedContainerURL() else { return nil }
-        return containerURL.appendingPathComponent("Images", isDirectory: true)
+        return getImagesDirectoryURL(for: .medium)
     }
     
-    // 获取元数据文件 URL
+    // 获取元数据文件 URL（根据尺寸类型）
+    private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
+        guard let containerURL = getSharedContainerURL() else { return nil }
+        return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
+    }
+    
+    // 兼容旧版本的方法，默认获取 medium 尺寸的元数据文件
     private func getMetadataFileURL() -> URL? {
-        guard let containerURL = getSharedContainerURL() else { return nil }
-        return containerURL.appendingPathComponent("metadata.json")
+        return getMetadataFileURL(for: .medium)
     }
     
-    // 获取所有图片元数据
+    // 获取所有图片元数据（默认获取 medium 尺寸）
     private func getImageMetadataList() -> [ImageMetadata] {
-        guard let metadataURL = getMetadataFileURL() else { 
+        return getImageMetadataList(for: .medium)
+    }
+    
+    // 获取指定尺寸的所有图片元数据
+    private func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
+        guard let metadataURL = getMetadataFileURL(for: sizeType) else { 
             print("Widget Log: 获取元数据文件URL失败")
             return [] 
         }
@@ -69,9 +101,14 @@ struct Provider: TimelineProvider {
         }
     }
     
-    // 获取图片 URL
+    // 获取图片 URL（默认获取 medium 尺寸）
     private func getImageURL(withID id: String) -> URL? {
-        guard let imagesDirectory = getImagesDirectoryURL() else { return nil }
+        return getImageURL(withID: id, for: .medium)
+    }
+    
+    // 获取指定尺寸的图片 URL
+    private func getImageURL(withID id: String, for sizeType: WidgetSizeType) -> URL? {
+        guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return nil }
         return imagesDirectory.appendingPathComponent("\(id).jpg")
     }
     
@@ -87,31 +124,38 @@ struct Provider: TimelineProvider {
     // 提供占位符条目
     func placeholder(in context: Context) -> WeeksEntry {
         let (week, year) = getCurrentWeekAndYear()
-        return WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year)
+        return WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
     }
 
     // 提供快照条目
     func getSnapshot(in context: Context, completion: @escaping (WeeksEntry) -> ()) {
-        let metadataList = getImageMetadataList()
+        // 根据 Widget 尺寸获取对应的元数据列表
+        let sizeType = getWidgetSizeType(for: context.family)
+        let metadataList = getImageMetadataList(for: sizeType)
         let (week, year) = getCurrentWeekAndYear()
         
         if let firstMetadata = metadataList.first {
-            let entry = WeeksEntry(date: Date(), imageID: firstMetadata.id, weekNumber: week, year: year)
+            let entry = WeeksEntry(date: Date(), imageID: firstMetadata.id, weekNumber: week, year: year, widgetFamily: context.family)
             completion(entry)
         } else {
-            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year)
+            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
             completion(entry)
         }
     }
 
     // 提供时间线条目
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeeksEntry>) -> ()) {
-        let metadataList = getImageMetadataList()
+        // 根据 Widget 尺寸获取对应的元数据列表
+        let sizeType = getWidgetSizeType(for: context.family)
+        let metadataList = getImageMetadataList(for: sizeType)
         let (week, year) = getCurrentWeekAndYear()
         
+        // 验证元数据和文件的一致性
+        let validatedMetadataList = validateImageMetadata(metadataList, for: sizeType)
+        
         // 如果没有图片，返回空条目
-        if metadataList.isEmpty {
-            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year)
+        if validatedMetadataList.isEmpty {
+            let entry = WeeksEntry(date: Date(), imageID: nil, weekNumber: week, year: year, widgetFamily: context.family)
             let timeline = Timeline(entries: [entry], policy: .atEnd)
             completion(timeline)
             return
@@ -122,15 +166,51 @@ struct Provider: TimelineProvider {
         let currentDate = Date()
         
         // 为每张图片创建一个条目，每隔15分钟切换一次
-        for (index, metadata) in metadataList.enumerated() {
+        for (index, metadata) in validatedMetadataList.enumerated() {
             let entryDate = Calendar.current.date(byAdding: .minute, value: index * 15, to: currentDate)!
-            let entry = WeeksEntry(date: entryDate, imageID: metadata.id, weekNumber: week, year: year)
+            let entry = WeeksEntry(date: entryDate, imageID: metadata.id, weekNumber: week, year: year, widgetFamily: context.family)
             entries.append(entry)
         }
         
         // 创建时间线，最后一张图片显示完后重新开始
         let timeline = Timeline(entries: entries, policy: .atEnd)
         completion(timeline)
+    }
+    
+    // 验证图片元数据和文件的一致性
+    private func validateImageMetadata(_ metadataList: [ImageMetadata], for sizeType: WidgetSizeType) -> [ImageMetadata] {
+        guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else {
+            print("Widget验证: 无法获取图片目录")
+            return []
+        }
+        
+        let validatedList = metadataList.filter { metadata in
+            let imageURL = imagesDirectory.appendingPathComponent("\(metadata.id).jpg")
+            let fileExists = FileManager.default.fileExists(atPath: imageURL.path)
+            
+            if !fileExists {
+                print("Widget验证: 图片文件不存在 - ID: \(metadata.id), 尺寸: \(sizeType.rawValue)")
+            }
+            
+            return fileExists
+        }
+        
+        // 如果验证后的列表与原列表不同，说明存在不一致，记录日志
+        if validatedList.count != metadataList.count {
+            print("Widget验证: 发现数据不一致，原始数量: \(metadataList.count), 验证后数量: \(validatedList.count)")
+        }
+        
+        return validatedList
+    }
+    
+    // 根据 WidgetFamily 获取对应的 WidgetSizeType
+    private func getWidgetSizeType(for family: WidgetFamily) -> WidgetSizeType {
+        switch family {
+        case .systemLarge:
+            return .large
+        default: // .systemMedium 和其他情况
+            return .medium
+        }
     }
 }
 
@@ -144,7 +224,7 @@ struct WeeksWidget: Widget {
         }
         .configurationDisplayName("Weeks")
         .description("显示每周精选图片")
-        .supportedFamilies([.systemMedium])
+        .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
 
@@ -156,14 +236,31 @@ struct WeeksWidgetEntryView : View {
     // App Group 标识符
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
-    // 获取图片
+    // 获取图片（根据 Widget 尺寸加载对应的图片）
     private func loadImage(withID id: String) -> UIImage? {
+        // 根据 Widget 尺寸获取对应的尺寸类型
+        let sizeType = getWidgetSizeType(for: entry.widgetFamily)
+        return loadImage(withID: id, for: sizeType)
+    }
+    
+    // 根据 WidgetFamily 获取对应的 WidgetSizeType
+    private func getWidgetSizeType(for family: WidgetFamily) -> WidgetSizeType {
+        switch family {
+        case .systemLarge:
+            return .large
+        default: // .systemMedium 和其他情况
+            return .medium
+        }
+    }
+    
+    // 获取指定尺寸的图片
+    private func loadImage(withID id: String, for sizeType: WidgetSizeType) -> UIImage? {
         guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
             print("Widget Log: 获取共享容器URL失败")
             return nil
         }
         
-        let imagesDirectory = containerURL.appendingPathComponent("Images")
+        let imagesDirectory = containerURL.appendingPathComponent("Images/\(sizeType.rawValue)")
         let imageURL = imagesDirectory.appendingPathComponent("\(id).jpg")
         print("Widget Log: 尝试加载图片路径: \(imageURL.path)")
         
@@ -194,7 +291,7 @@ struct WeeksWidgetEntryView : View {
             return nil
         }
         
-        print("Widget Log: 成功加载图片ID: \(id), 文件大小: \(imageData.count) bytes")
+        print("Widget Log: 成功加载图片ID: \(id), 文件大小: \(imageData.count) bytes, 尺寸类型: \(sizeType.rawValue)")
         return image
     }
     
@@ -211,6 +308,10 @@ struct WeeksWidgetEntryView : View {
                         .font(.system(size: 14))
                         .foregroundColor(.white.opacity(0.8))
                 }
+            } else if entry.widgetFamily == .systemLarge {
+                // 大尺寸 Widget 布局 - 移除时间信息展示
+                // 保持空布局，只显示图片
+                EmptyView()
             }
         }
         .containerBackground(for: .widget) {

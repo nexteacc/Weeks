@@ -94,26 +94,7 @@ struct GalleryView: View {
                         ScrollView {
                             VStack(spacing: 0) {
                                 ForEach(Array(uiImages.enumerated()), id: \.offset) { (index, img) in
-                                     GalleryImageCard(image: img, index: index, onDelete: {
-                                         // 通过图片内容找到对应的ID进行删除
-                                         let allImages = ImageManager.shared.getAllImages()
-                                         if index < allImages.count {
-                                             let imageID = allImages[index].metadata.id
-                                             _ = ImageManager.shared.deleteImage(withID: imageID)
-                                             // 刷新所有图片
-                                             DispatchQueue.main.async {
-                                                 let all = ImageManager.shared.getAllImages().map { $0.image }
-                                                 uiImages = all
-                                                 
-                                                 // 如果删除后没有图片了，返回首页
-                                                 if all.isEmpty {
-                                                     DispatchQueue.main.async {
-                                                         dismiss()
-                                                     }
-                                                 }
-                                             }
-                                         }
-                                     })
+                                     GalleryImageCard(image: img, index: index)
                                 }
                             }
                             .padding(.vertical, 20)
@@ -208,7 +189,6 @@ struct GalleryView: View {
 struct GalleryImageCard: View {
     let image: UIImage
     let index: Int
-    let onDelete: () -> Void
     var body: some View {
         GeometryReader { geo in
             let cardMidY = geo.frame(in: .global).midY
@@ -234,13 +214,6 @@ struct GalleryImageCard: View {
                 .opacity(opacity)
                 .shadow(radius: 6)
                 .zIndex(zIndex)
-                .contextMenu {
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
-                }
         }
         .frame(height: 180)
         .padding(.horizontal)
