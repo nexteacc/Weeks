@@ -211,7 +211,7 @@ struct WeeksWidget: Widget {
             WeeksWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Weeks")
-        .description("显示每周精选图片")
+        .description("Display weekly featured images")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }

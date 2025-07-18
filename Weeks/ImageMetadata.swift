@@ -77,7 +77,7 @@ class ImageManager {
         let mediumID = saveImageWithoutReload(image, for: .medium)
         
         // 为 large 尺寸保存图片
-        let largeID = saveImageWithoutReload(image, for: .large)
+        _ = saveImageWithoutReload(image, for: .large)
         
         // 延迟刷新Widget，确保文件系统操作完成
         // 使用更长的延迟时间

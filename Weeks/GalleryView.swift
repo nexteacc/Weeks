@@ -13,12 +13,14 @@ struct GalleryView: View {
     @Binding var uiImages: [UIImage]
     
     @State private var selectedItems: [PhotosPickerItem] = []
+    @State private var isPawAnimating = false
+    @State private var animationProgress: CGFloat = 0
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         if uiImages.isEmpty {
             VStack {
-                Text("暂无图片")
+                Text("No Images")
                     .foregroundColor(.gray)
                     .onAppear {
                         // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
@@ -52,9 +54,9 @@ struct GalleryView: View {
                             Spacer()
                             Button {
                                 // 显示确认对话框
-                                let alert = UIAlertController(title: "确认清空", message: "确定要清空所有图片吗？", preferredStyle: .alert)
-                                alert.addAction(UIAlertAction(title: "取消", style: .cancel))
-                                alert.addAction(UIAlertAction(title: "确定", style: .destructive) { _ in
+                                let alert = UIAlertController(title: "Confirm Clear", message: "Are you sure you want to clear all images?", preferredStyle: .alert)
+                                alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+                                alert.addAction(UIAlertAction(title: "Confirm", style: .destructive) { _ in
                                     // 清空所有图片
                                     _ = ImageManager.shared.clearAllImages()
                                     // 刷新所有图片
@@ -71,19 +73,10 @@ struct GalleryView: View {
                                     rootViewController.present(alert, animated: true)
                                 }
                             } label: {
-                                Image(systemName: "xmark")
-                                    .font(.system(size: 14))
-                                    .foregroundColor(.white)
-                                    .padding()
-                                    .frame(width: 38, height: 38)
-                                    .background(
-                                        Circle()
-                                            .fill(.blue)
-                                            .overlay(
-                                                Circle()
-                                                    .stroke(.blue, lineWidth: 2)
-                                            )
-                                    )
+                                Image("clean")
+                                    .resizable()
+                                    .scaledToFit()
+                                    .frame(width: 60, height: 60)
                             }
                             Spacer()
                         }
@@ -106,20 +99,40 @@ struct GalleryView: View {
                             if !ImageManager.shared.isMaxImageCountReached() {
                                 HStack {
                                     Spacer()
-                                    PhotosPicker(selection: $selectedItems, maxSelectionCount: 30 - uiImages.count, matching: .images) {
-                                        Image(systemName: "plus")
-                                            .font(.system(size: 14))
-                                            .foregroundColor(.white)
-                                            .padding()
-                                            .frame(width: 50, height: 30)
-                                            .background(
-                                                RoundedRectangle(cornerRadius: 12)
-                                                    .fill(.blue)
-                                                    .overlay(
-                                                        RoundedRectangle(cornerRadius: 12)
-                                                            .stroke(.blue, lineWidth: 2)
-                                                    )
-                                            )
+                                    ZStack {
+                                        // 动画效果层
+                                        if isPawAnimating {
+                                            Image("paw")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 40, height: 40)
+                                                .offset(y: animationProgress)
+                                                .opacity(1.0 - (abs(animationProgress) / 20.0))
+                                                .allowsHitTesting(false)
+                                        }
+                                        
+                                        // 实际交互层
+                                        PhotosPicker(selection: $selectedItems, maxSelectionCount: 30 - uiImages.count, matching: .images) {
+                                            Image("paw")
+                                                .resizable()
+                                                .scaledToFit()
+                                                .frame(width: 40, height: 40)
+                                        }
+                                        .onTapGesture {
+                                            // 触发动画
+                                            isPawAnimating = true
+                                            animationProgress = 0
+                                            
+                                            withAnimation(.easeOut(duration: 0.4)) {
+                                                animationProgress = -20
+                                            }
+                                            
+                                            // 动画结束后重置
+                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                                                isPawAnimating = false
+                                                animationProgress = 0
+                                            }
+                                        }
                                     }
                                     Spacer()
                                 }
