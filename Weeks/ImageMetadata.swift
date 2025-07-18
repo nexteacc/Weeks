@@ -61,10 +61,7 @@ class ImageManager {
         return imagesURL
     }
     
-    // 兼容旧版本的方法，默认返回 medium 尺寸的目录
-    private func getImagesDirectoryURL() -> URL? {
-        return getImagesDirectoryURL(for: .medium)
-    }
+    // 已删除兼容旧版本的getImagesDirectoryURL()方法
     
     // 获取元数据文件 URL
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
@@ -72,10 +69,7 @@ class ImageManager {
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
     
-    // 兼容旧版本的方法，默认返回 medium 尺寸的元数据文件
-    private func getMetadataFileURL() -> URL? {
-        return getMetadataFileURL(for: .medium)
-    }
+    // 已删除兼容旧版本的getMetadataFileURL()方法
     
     // 保存图片（为所有尺寸保存独立图片）
     func saveImage(_ image: UIImage) -> String? {
@@ -192,10 +186,7 @@ class ImageManager {
         return savedIDs
     }
     
-    // 内部保存方法：不刷新Widget (兼容旧版本)
-    private func saveImageWithoutReload(_ image: UIImage) -> String? {
-        return saveImageWithoutReload(image, for: .medium)
-    }
+    // 已删除兼容旧版本的saveImageWithoutReload方法
     
 
     
@@ -269,35 +260,7 @@ class ImageManager {
         }
     }
     
-    // 清空指定尺寸的所有图片（不刷新Widget）- 保留用于向后兼容
-    private func clearAllImagesWithoutReload(for sizeType: WidgetSizeType) -> Bool {
-        // 获取图片目录
-        guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return false }
-        
-        // 先清空元数据
-        let metadataUpdateSuccess = saveImageMetadataList([], for: sizeType)
-        if !metadataUpdateSuccess {
-            print("清空元数据失败: \(sizeType.rawValue)")
-            return false
-        }
-        
-        // 然后删除图片文件
-        do {
-            let fileURLs = try FileManager.default.contentsOfDirectory(
-                at: imagesDirectory,
-                includingPropertiesForKeys: nil
-            )
-            
-            for fileURL in fileURLs {
-                try FileManager.default.removeItem(at: fileURL)
-            }
-        } catch {
-            print("清空图片目录失败: \(error)")
-            return false
-        }
-        
-        return true
-    }
+    // 此处移除了未使用的clearAllImagesWithoutReload方法
     
     // 根据ID获取图片（默认获取 medium 尺寸）
     func getImage(withID id: String) -> UIImage? {

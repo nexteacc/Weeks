@@ -56,10 +56,7 @@ struct Provider: TimelineProvider {
         return containerURL.appendingPathComponent("Images/\(sizeType.rawValue)", isDirectory: true)
     }
     
-    // 兼容旧版本的方法，默认获取 medium 尺寸的目录
-    private func getImagesDirectoryURL() -> URL? {
-        return getImagesDirectoryURL(for: .medium)
-    }
+    // 已删除兼容旧版本的getImagesDirectoryURL()方法
     
     // 获取元数据文件 URL（根据尺寸类型）
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
@@ -67,15 +64,9 @@ struct Provider: TimelineProvider {
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
     
-    // 兼容旧版本的方法，默认获取 medium 尺寸的元数据文件
-    private func getMetadataFileURL() -> URL? {
-        return getMetadataFileURL(for: .medium)
-    }
+    // 已删除兼容旧版本的getMetadataFileURL()方法
     
-    // 获取所有图片元数据（默认获取 medium 尺寸）
-    private func getImageMetadataList() -> [ImageMetadata] {
-        return getImageMetadataList(for: .medium)
-    }
+    // 已删除兼容旧版本的getImageMetadataList()方法
     
     // 获取指定尺寸的所有图片元数据
     private func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
@@ -101,10 +92,7 @@ struct Provider: TimelineProvider {
         }
     }
     
-    // 获取图片 URL（默认获取 medium 尺寸）
-    private func getImageURL(withID id: String) -> URL? {
-        return getImageURL(withID: id, for: .medium)
-    }
+    // 已删除兼容旧版本的getImageURL方法
     
     // 获取指定尺寸的图片 URL
     private func getImageURL(withID id: String, for sizeType: WidgetSizeType) -> URL? {
