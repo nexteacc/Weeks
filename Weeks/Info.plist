@@ -6,14 +6,8 @@
 	<string>Weeks</string>
 	<key>UIUserInterfaceStyle</key>
 	<string>Light</string>
-	<!-- 相册访问权限（必需） -->
+	<!-- Photo Library Access Permission (Required) -->
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Weeks需要访问您的相册以选择图片，这些图片将用于创建每周展示的Widget。</string>
-	<!-- 推送通知权限（已在entitlements中配置） -->
-	<key>NSUserNotificationUsageDescription</key>
-	<string>Weeks希望发送通知以提醒您查看或更新每周图片。</string>
-	<!-- App Groups配置（已在entitlements中配置） -->
-	<key>AppGroupIdentifier</key>
-	<string>group.com.nextbigtoy.weeks</string>
+	<string>Weeks needs to access your photo library to select images, which will be used to create weekly displayed Widgets.</string>
 </dict>
 </plist>
