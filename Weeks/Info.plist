@@ -2,12 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDisplayName</key>
-	<string>Weeks</string>
-	<key>UIUserInterfaceStyle</key>
-	<string>Light</string>
-	<!-- Photo Library Access Permission (Required) -->
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Weeks needs to access your photo library to select images, which will be used to create weekly displayed Widgets.</string>
+    <key>UIUserInterfaceStyle</key>
+    <string>Light</string>
 </dict>
 </plist>

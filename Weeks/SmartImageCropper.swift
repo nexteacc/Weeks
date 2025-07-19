@@ -53,46 +53,127 @@ struct SmartImageCropper {
         strategy: CropStrategy = .hybrid,
         completion: @escaping (UIImage?) -> Void
     ) {
+        // 添加全局超时保护
+        var hasCompleted = false
+        let timeoutSeconds = 8.0 // 8秒超时
+        
+        // 创建安全回调函数，确保只调用一次
+        let safeCompletion: (UIImage?) -> Void = { result in
+            DispatchQueue.main.async {
+                if !hasCompleted {
+                    hasCompleted = true
+                    completion(result)
+                }
+            }
+        }
+        
+        // 设置全局超时
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds) {
+            if !hasCompleted {
+                print("智能裁剪超时，使用中心裁剪作为兜底")
+                let centerResult = ImageCropper.cropCenter(of: image, toAspectRatio: targetRatio)
+                safeCompletion(centerResult)
+            }
+        }
+        
         switch strategy {
         case .center:
             let result = ImageCropper.cropCenter(of: image, toAspectRatio: targetRatio)
-            completion(result)
+            safeCompletion(result)
             
         case .attentionBased:
-            cropUsingAttentionSaliency(image: image, targetRatio: targetRatio, completion: completion)
+            print("使用注意力显著性裁剪策略")
+            cropUsingAttentionSaliency(image: image, targetRatio: targetRatio) { result in
+                safeCompletion(result)
+            }
             
         case .objectBased:
-            cropUsingObjectSaliency(image: image, targetRatio: targetRatio, completion: completion)
+            print("使用对象显著性裁剪策略")
+            cropUsingObjectSaliency(image: image, targetRatio: targetRatio) { result in
+                safeCompletion(result)
+            }
             
         case .faceDetection:
-            cropUsingFaceDetection(image: image, targetRatio: targetRatio, completion: completion)
+            print("使用人脸检测裁剪策略")
+            cropUsingFaceDetection(image: image, targetRatio: targetRatio) { result in
+                safeCompletion(result)
+            }
             
         case .hybrid:
+            print("使用混合裁剪策略")
             // 基于Apple Vision框架特性的优化策略：
             // 1. 人脸检测（精确定位）
             // 2. 对象显著性（前景物体）
             // 3. 注意力显著性（视觉焦点）
             // 4. 中心裁剪（兜底）
-            cropUsingFaceDetection(image: image, targetRatio: targetRatio) { result in
-                if let result = result {
-                    completion(result)
-                } else {
+            
+            // 为每个步骤设置单独的超时
+            let stepTimeoutSeconds = 2.5 // 每个步骤2.5秒超时
+            
+            // 步骤1：人脸检测
+            let faceDetectionTimeout = DispatchWorkItem {
+                if !hasCompleted {
+                    print("人脸检测超时，尝试对象显著性")
+                    // 步骤2：对象显著性
                     cropUsingObjectSaliency(image: image, targetRatio: targetRatio) { objectResult in
-                        if let objectResult = objectResult {
-                            completion(objectResult)
-                        } else {
+                        if !hasCompleted && objectResult != nil {
+                            print("对象显著性检测成功")
+                            safeCompletion(objectResult)
+                        } else if !hasCompleted {
+                            print("对象显著性检测失败，尝试注意力显著性")
+                            // 步骤3：注意力显著性
                             cropUsingAttentionSaliency(image: image, targetRatio: targetRatio) { attentionResult in
-                                if let attentionResult = attentionResult {
-                                    completion(attentionResult)
-                                } else {
+                                if !hasCompleted && attentionResult != nil {
+                                    print("注意力显著性检测成功")
+                                    safeCompletion(attentionResult)
+                                } else if !hasCompleted {
+                                    print("注意力显著性检测失败，使用中心裁剪")
+                                    // 步骤4：中心裁剪（兜底）
                                     let centerResult = ImageCropper.cropCenter(of: image, toAspectRatio: targetRatio)
-                                    completion(centerResult)
+                                    safeCompletion(centerResult)
                                 }
                             }
                         }
                     }
                 }
             }
+            
+            // 开始人脸检测
+            cropUsingFaceDetection(image: image, targetRatio: targetRatio) { result in
+                // 取消超时任务
+                faceDetectionTimeout.cancel()
+                
+                if !hasCompleted && result != nil {
+                    print("人脸检测成功")
+                    safeCompletion(result)
+                } else if !hasCompleted {
+                    print("人脸检测失败，尝试对象显著性")
+                    // 步骤2：对象显著性
+                    cropUsingObjectSaliency(image: image, targetRatio: targetRatio) { objectResult in
+                        if !hasCompleted && objectResult != nil {
+                            print("对象显著性检测成功")
+                            safeCompletion(objectResult)
+                        } else if !hasCompleted {
+                            print("对象显著性检测失败，尝试注意力显著性")
+                            // 步骤3：注意力显著性
+                            cropUsingAttentionSaliency(image: image, targetRatio: targetRatio) { attentionResult in
+                                if !hasCompleted && attentionResult != nil {
+                                    print("注意力显著性检测成功")
+                                    safeCompletion(attentionResult)
+                                } else if !hasCompleted {
+                                    print("注意力显著性检测失败，使用中心裁剪")
+                                    // 步骤4：中心裁剪（兜底）
+                                    let centerResult = ImageCropper.cropCenter(of: image, toAspectRatio: targetRatio)
+                                    safeCompletion(centerResult)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 设置人脸检测超时
+            DispatchQueue.global().asyncAfter(deadline: .now() + stepTimeoutSeconds, execute: faceDetectionTimeout)
         }
     }
     
@@ -414,27 +495,6 @@ struct SmartImageCropper {
         return ImageCropper.resizeForWidget(croppedImage, targetRatio: targetRatio)
     }
     
-    /// 处理人脸检测结果
-    private static func processFaceDetections(_ faces: [VNFaceObservation], imageSize: CGSize) -> CGRect? {
-        guard !faces.isEmpty else { return nil }
-        
-        // 选择置信度最高的人脸，或合并多个人脸
-        if faces.count == 1 {
-            let face = faces[0]
-            print("   单个人脸，置信度: \(face.confidence)")
-            return convertVisionRectToUIKit(face.boundingBox, imageSize: imageSize)
-        } else {
-            // 多个人脸：合并边界框或选择最大的
-            print("   多个人脸，合并处理")
-            var unionRect = faces[0].boundingBox
-            for face in faces.dropFirst() {
-                unionRect = unionRect.union(face.boundingBox)
-                print("     人脸置信度: \(face.confidence)")
-            }
-            return convertVisionRectToUIKit(unionRect, imageSize: imageSize)
-        }
-    }
-    
 
     
     /// 将Vision坐标系转换为UIKit坐标系
@@ -682,14 +742,14 @@ struct SmartImageCropper {
     
     /// 分析显著区域在图片中的位置类型
     private static func analyzeSalientPosition(_ rect: CGRect, in imageSize: CGSize) -> SalientPosition {
-        let centerX = imageSize.width / 2
-        let centerY = imageSize.height / 2
+        // 图片中心点坐标
+        // centerY 未使用，移除
         let rectCenterX = rect.midX
         let rectCenterY = rect.midY
         
         // 定义边界阈值（距离边缘的比例）
         let edgeThreshold: CGFloat = 0.15 // 15%的边缘区域
-        let cornerThreshold: CGFloat = 0.25 // 25%的角落区域
+        // cornerThreshold 未使用，移除
         
         let leftEdge = imageSize.width * edgeThreshold
         let rightEdge = imageSize.width * (1 - edgeThreshold)

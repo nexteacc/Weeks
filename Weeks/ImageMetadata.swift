@@ -43,6 +43,28 @@ class ImageManager {
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
     }
     
+    // Get original images directory URL (in app's Documents directory)
+    private func getOriginalImagesDirectoryURL() -> URL? {
+        let fileManager = FileManager.default
+        guard let documentsDirectory = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        
+        let imagesURL = documentsDirectory.appendingPathComponent("OriginalImages", isDirectory: true)
+        
+        // Ensure directory exists
+        if !fileManager.fileExists(atPath: imagesURL.path) {
+            do {
+                try fileManager.createDirectory(at: imagesURL, withIntermediateDirectories: true)
+            } catch {
+                print("Failed to create original image directory: \(error)")
+                return nil
+            }
+        }
+        
+        return imagesURL
+    }
+    
     // Get image storage directory
     private func getImagesDirectoryURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
@@ -73,37 +95,78 @@ class ImageManager {
     
     // Save image (save independent images for all sizes)
     func saveImage(_ image: UIImage, completion: @escaping (String?) -> Void) {
-        let group = DispatchGroup()
-        var mediumID: String?
-        
-        // Save image for medium size
-        group.enter()
-        saveImageWithoutReload(image, for: .medium) { id in
-            mediumID = id
-            group.leave()
-        }
-        
-        // Save image for large size
-        group.enter()
-        saveImageWithoutReload(image, for: .large) { _ in
-            group.leave()
-        }
-        
-        // Wait for all save operations to complete
-        group.notify(queue: .main) {
-            // Delay widget refresh to ensure file system operations are complete
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                WidgetCenter.shared.reloadAllTimelines()
-                
-                // Add secondary refresh mechanism to ensure Widget updates correctly
-                // Especially for large size Widgets
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    WidgetCenter.shared.reloadAllTimelines()
+        // 使用主队列确保线程安全
+        DispatchQueue.main.async {
+            let group = DispatchGroup()
+            var mediumID: String?
+            
+            // 添加超时保护
+            let timeoutSeconds = 15.0 // 15秒超时
+            var hasCompleted = false
+            let timeoutWorkItem = DispatchWorkItem {
+                if !hasCompleted {
+                    print("单张图片保存超时")
+                    hasCompleted = true
+                    completion(mediumID) // 返回已保存的图片ID（如果有）
                 }
             }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
             
-            // Return medium size image ID (consistent with original logic)
-            completion(mediumID)
+            // Save image for medium size
+            group.enter()
+            self.saveImageWithoutReload(image, for: .medium) { id in
+                mediumID = id
+                group.leave()
+            }
+            
+            // Save image for large size
+            group.enter()
+            self.saveImageWithoutReload(image, for: .large) { _ in
+                group.leave()
+            }
+            
+            // Wait for all save operations to complete
+            group.notify(queue: .main) {
+                // 取消超时任务
+                timeoutWorkItem.cancel()
+                
+                // 标记完成
+                if !hasCompleted {
+                    hasCompleted = true
+                    
+                    // Delay widget refresh to ensure file system operations are complete
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        WidgetCenter.shared.reloadAllTimelines()
+                        
+                        // Add secondary refresh mechanism to ensure Widget updates correctly
+                        // Especially for large size Widgets
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            WidgetCenter.shared.reloadAllTimelines()
+                        }
+                    }
+                    
+                    // Return medium size image ID (consistent with original logic)
+                    completion(mediumID)
+                }
+            }
+        }
+    }
+    
+    // Save original image (before cropping)
+    private func saveOriginalImage(_ image: UIImage, withID imageID: String) {
+        guard let originalImagesDirectory = getOriginalImagesDirectoryURL(),
+              let imageData = image.jpegData(compressionQuality: 0.9) else {
+            print("保存原始图片失败：无法获取目录或转换图片数据")
+            return
+        }
+        
+        let imageURL = originalImagesDirectory.appendingPathComponent("\(imageID).jpg")
+        
+        do {
+            try imageData.write(to: imageURL)
+            print("原始图片保存成功，ID：\(imageID)")
+        } catch {
+            print("保存原始图片文件失败：\(error)，ID：\(imageID)")
         }
     }
     
@@ -113,27 +176,72 @@ class ImageManager {
         for sizeType: WidgetSizeType, 
         completion: @escaping (String?) -> Void
     ) {
+        // 添加方法级别的超时保护
+        var hasCompleted = false
+        let timeoutSeconds = 10.0 // 10秒超时
+        
+        // 创建安全回调函数，确保只调用一次
+        let safeCompletion: (String?) -> Void = { result in
+            DispatchQueue.main.async {
+                if !hasCompleted {
+                    hasCompleted = true
+                    completion(result)
+                }
+            }
+        }
+        
+        // 设置超时
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds) {
+            if !hasCompleted {
+                print("单张图片裁剪保存超时，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
+            }
+        }
+        
         // Check if maximum count limit is reached
         if getImageMetadataList(for: sizeType).count >= maxImageCount {
-            completion(nil)
+            // Important: Always call completion handler
+            print("已达到最大图片数量限制：\(maxImageCount)，尺寸：\(sizeType.rawValue)")
+            safeCompletion(nil)
             return
         }
         
         // Generate UUID
         let imageID = UUID().uuidString
+        print("开始处理图片，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+        
+        // 如果是medium尺寸，先保存原始图片（在裁剪前）
+        if sizeType == .medium {
+            saveOriginalImage(image, withID: imageID)
+        }
         
         // Use smart cropping
         SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
-            guard let self = self,
-                  let croppedImage = croppedImage,
+            // 检查是否已经完成（可能是由于超时）
+            if hasCompleted {
+                print("智能裁剪回调返回，但已超时完成，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                return
+            }
+            
+            guard let self = self else {
+                // Handle case where self is nil
+                print("self 为 nil，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
+                return
+            }
+            
+            // Check if we have a valid cropped image
+            guard let croppedImage = croppedImage,
                   let imageData = croppedImage.jpegData(compressionQuality: 0.8) else {
-                completion(nil)
+                print("裁剪图片失败或压缩失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
                 return
             }
             
             // Get image directory for corresponding size
             guard let imagesDirectory = self.getImagesDirectoryURL(for: sizeType) else {
-                completion(nil)
+                print("获取图片目录失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
                 return
             }
             
@@ -147,14 +255,14 @@ class ImageManager {
                       let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
                       let fileSize = fileAttributes[.size] as? Int64,
                       fileSize == imageData.count else {
-                    print("Image file write verification failed")
-                    completion(nil)
+                    print("图片文件完整性验证失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                    safeCompletion(nil)
                     return
                 }
                 
             } catch {
-                print("Failed to save image: \(error)")
-                completion(nil)
+                print("保存图片文件失败：\(error)，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
                 return
             }
             
@@ -170,103 +278,130 @@ class ImageManager {
             
             // Save updated metadata
             guard self.saveImageMetadataList(metadataList, for: sizeType) else {
-                print("Failed to save metadata")
-                completion(nil)
+                print("保存元数据失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                safeCompletion(nil)
                 return
             }
             
-            completion(imageID)
+            print("图片处理完成，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+            safeCompletion(imageID)
         }
     }
     
     // Batch save images
     func saveImages(_ images: [UIImage], completion: @escaping ([String]) -> Void) {
-        let group = DispatchGroup()
-        var savedIDs: [String] = []
-        let lock = NSLock()
-        
-        for image in images {
-            // Check if maximum count limit is reached
-            if getImageMetadataList(for: .medium).count >= maxImageCount {
-                break
+        // 使用主队列确保线程安全
+        DispatchQueue.main.async {
+            let group = DispatchGroup()
+            var savedIDs: [String] = []
+            let lock = NSLock()
+            
+            // Check if there are any images to process
+            if images.isEmpty {
+                completion([])
+                return
             }
             
-            // Save image for medium size
-            group.enter()
-            saveImageWithoutReload(image, for: .medium) { id in
-                if let id = id {
-                    lock.lock()
-                    savedIDs.append(id)
-                    lock.unlock()
+            // Track how many images we can actually save
+            let availableSlots = self.maxImageCount - self.getImageMetadataList(for: .medium).count
+            let imagesToProcess = availableSlots > 0 ? Array(images.prefix(availableSlots)) : []
+            
+            // If we can't save any images, return immediately
+            if imagesToProcess.isEmpty {
+                completion([])
+                return
+            }
+            
+            // 添加全局超时保护
+            let timeoutSeconds = 30.0 // 30秒超时
+            var hasCompleted = false
+            let timeoutWorkItem = DispatchWorkItem {
+                if !hasCompleted {
+                    print("批量保存图片超时")
+                    hasCompleted = true
+                    completion(savedIDs) // 返回已保存的图片ID
                 }
-                group.leave()
             }
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
             
-            // Simultaneously save image for large size
-            group.enter()
-            saveImageWithoutReload(image, for: .large) { _ in
-                group.leave()
-            }
-        }
-        
-        // Wait for all save operations to complete
-        group.notify(queue: .main) {
-            // Refresh Widget after batch save is complete
-            if !savedIDs.isEmpty {
-                // Use longer delay time
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    WidgetCenter.shared.reloadAllTimelines()
-                    
-                    // Add secondary refresh mechanism to ensure Widget updates correctly
-                    // Especially for large size Widgets
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        WidgetCenter.shared.reloadAllTimelines()
+            for image in imagesToProcess {
+                // Save image for medium size
+                group.enter()
+                self.saveImageWithoutReload(image, for: .medium) { id in
+                    if let id = id {
+                        lock.lock()
+                        savedIDs.append(id)
+                        lock.unlock()
                     }
+                    group.leave()
+                }
+                
+                // Simultaneously save image for large size
+                group.enter()
+                self.saveImageWithoutReload(image, for: .large) { _ in
+                    group.leave()
                 }
             }
             
-            completion(savedIDs)
+            // Wait for all save operations to complete
+            group.notify(queue: .main) {
+                // 取消超时任务
+                timeoutWorkItem.cancel()
+                
+                // 标记完成
+                if !hasCompleted {
+                    hasCompleted = true
+                    
+                    // Refresh Widget after batch save is complete
+                    if !savedIDs.isEmpty {
+                        // Use longer delay time
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            WidgetCenter.shared.reloadAllTimelines()
+                            
+                            // Add secondary refresh mechanism to ensure Widget updates correctly
+                            // Especially for large size Widgets
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                WidgetCenter.shared.reloadAllTimelines()
+                            }
+                        }
+                    }
+                    
+                    completion(savedIDs)
+                }
+            }
         }
     }
     
-    // Compatibility method for old version (deprecated)
-    @available(*, deprecated, message: "Use async version with completion handler")
-    func saveImage(_ image: UIImage) -> String? {
-        var result: String?
-        let semaphore = DispatchSemaphore(value: 0)
+    // 已移除弃用的同步版本函数，请使用带有完成处理程序的异步版本
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    // Clear all original image files
+    private func clearAllOriginalImageFiles() -> Bool {
+        guard let imagesDirectory = getOriginalImagesDirectoryURL() else { return false }
         
-        saveImage(image) { id in
-            result = id
-            semaphore.signal()
+        do {
+            let fileURLs = try FileManager.default.contentsOfDirectory(at: imagesDirectory, includingPropertiesForKeys: nil)
+            for fileURL in fileURLs {
+                if fileURL.pathExtension.lowercased() == "jpg" {
+                    try FileManager.default.removeItem(at: fileURL)
+                }
+            }
+            print("Successfully cleared all original image files")
+            return true
+        } catch {
+            print("Failed to clear original image files: \(error)")
+            return false
         }
-        
-        semaphore.wait()
-        return result
     }
-    
-    @available(*, deprecated, message: "Use async version with completion handler")
-    func saveImages(_ images: [UIImage]) -> [String] {
-        var result: [String] = []
-        let semaphore = DispatchSemaphore(value: 0)
-        
-        saveImages(images) { ids in
-            result = ids
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        return result
-    }
-    
-
-    
-
-    
-
-    
-
-    
-
     
     // Clear all images (clear images of all sizes) - atomic operation version
     func clearAllImages() -> Bool {
@@ -297,6 +432,7 @@ class ImageManager {
         // 3. Delete all image files
         success = success && clearAllImageFiles(for: .medium)
         success = success && clearAllImageFiles(for: .large)
+        success = success && clearAllOriginalImageFiles() // 添加清理原始图片
         
         if !success {
             print("Clear failed: Image file deletion failed")
@@ -331,6 +467,25 @@ class ImageManager {
     }
     
     // Removed unused clearAllImagesWithoutReload method
+    
+    // Get original image by ID
+    func getOriginalImage(withID id: String) -> UIImage? {
+        guard let originalImagesDirectory = getOriginalImagesDirectoryURL() else {
+            print("无法获取原始图片目录，ID：\(id)")
+            return nil // 直接返回nil，不回退
+        }
+        
+        let imageURL = originalImagesDirectory.appendingPathComponent("\(id).jpg")
+        
+        guard FileManager.default.fileExists(atPath: imageURL.path),
+              let imageData = try? Data(contentsOf: imageURL),
+              let image = UIImage(data: imageData) else {
+            print("原始图片不存在或已损坏，ID：\(id)")
+            return nil // 直接返回nil，不回退
+        }
+        
+        return image
+    }
     
     // Get image by ID (default gets medium size)
     func getImage(withID id: String) -> UIImage? {
@@ -400,6 +555,21 @@ class ImageManager {
             print("Failed to save metadata: \(error)")
             return false
         }
+    }
+    
+    // Get all original images (in order)
+    func getAllOriginalImages() -> [(metadata: ImageMetadata, image: UIImage)] {
+        let metadataList = getImageMetadataList(for: .medium).sorted { $0.order < $1.order }
+        var result: [(metadata: ImageMetadata, image: UIImage)] = []
+        
+        for metadata in metadataList {
+            if let image = getOriginalImage(withID: metadata.id) {
+                result.append((metadata: metadata, image: image))
+            }
+            // 不回退到裁剪版本，如果原始图片不存在则跳过
+        }
+        
+        return result
     }
     
     // Get all images (in order, default gets medium size)

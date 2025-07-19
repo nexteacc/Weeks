@@ -54,17 +54,13 @@ struct Provider: TimelineProvider {
         return containerURL.appendingPathComponent("Images/\(sizeType.rawValue)", isDirectory: true)
     }
     
-    // 已删除兼容旧版本的getImagesDirectoryURL()方法
-    
     // 获取元数据文件 URL（根据尺寸类型）
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
     
-    // 已删除兼容旧版本的getMetadataFileURL()方法
-    
-    // 已删除兼容旧版本的getImageMetadataList()方法
+
     
     // 获取指定尺寸的所有图片元数据
     private func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
@@ -90,7 +86,7 @@ struct Provider: TimelineProvider {
         }
     }
     
-    // 已删除兼容旧版本的getImageURL方法
+
     
     // 获取指定尺寸的图片 URL
     private func getImageURL(withID id: String, for sizeType: WidgetSizeType) -> URL? {
@@ -98,7 +94,7 @@ struct Provider: TimelineProvider {
         return imagesDirectory.appendingPathComponent("\(id).jpg")
     }
     
-    // 已删除获取当前周数和年份的方法，因为不再需要
+
     
     // 提供占位符条目
     func placeholder(in context: Context) -> WeeksEntry {

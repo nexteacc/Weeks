@@ -246,10 +246,15 @@ struct GalleryView: View {
                 updateDateInfo()
                 setupMidnightTimer()
                 
-                // Sync all images when page loads
+                // Sync all images when page loads - use original images
                 DispatchQueue.main.async {
-                    let all = ImageManager.shared.getAllImages().map { $0.image }
+                    let all = ImageManager.shared.getAllOriginalImages().map { $0.image }
                     uiImages = all
+                    
+                    // 如果没有加载到任何图片但元数据存在，可以记录日志
+                    if uiImages.isEmpty && !ImageManager.shared.getImageMetadataList().isEmpty {
+                        print("警告：元数据存在但无法加载原始图片")
+                    }
                 }
             }
             .onDisappear {
@@ -269,9 +274,9 @@ struct GalleryView: View {
                     if !results.isEmpty {
                         // Save images using smart cropping
                         ImageManager.shared.saveImages(results) { savedIDs in
-                            // Refresh all images
+                            // Refresh all images - use original images
                             DispatchQueue.main.async {
-                                let all = ImageManager.shared.getAllImages().map { $0.image }
+                                let all = ImageManager.shared.getAllOriginalImages().map { $0.image }
                                 uiImages = all
                             }
                         }
@@ -287,6 +292,7 @@ struct GalleryView: View {
 struct GalleryImageCard: View {
     let image: UIImage
     let index: Int
+    
     var body: some View {
         GeometryReader { geo in
             let cardMidY = geo.frame(in: .global).midY
@@ -294,27 +300,68 @@ struct GalleryImageCard: View {
             let normalized = (cardMidY - scrollMidY) / geo.size.height
             let rotationAngle = Double(normalized * 20)
             let scale = max(1 - abs(normalized) * 0.2, 0.8)
-            // Fully opaque image display, preserving 3D effect without affecting image clarity
-            let opacity = 1.0
             let zIndex = Double(1 - abs(normalized))
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
-                .frame(height: 180)
-                .clipped()
-                .cornerRadius(20)
-                .rotation3DEffect(
-                    .degrees(rotationAngle),
-                    axis: (x: 1.0, y: 0.0, z: 0.0),
-                    perspective: 0.7
-                )
-                .scaleEffect(scale)
-                .opacity(opacity)
-                .shadow(radius: 6)
-                .zIndex(zIndex)
+            
+            // 计算图片宽高比和卡片宽高比
+            let imageRatio = image.size.width / image.size.height
+            let cardWidth = geo.size.width
+            let cardRatio = cardWidth / 180
+            
+            // 确定最佳显示模式
+            let usesFillMode = shouldUseFillMode(imageRatio: imageRatio, cardRatio: cardRatio)
+            
+            ZStack {
+                // 背景层 - 使用模糊效果增强视觉体验
+                if !usesFillMode {
+                    // 只有在fit模式下才需要背景
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(height: 180)
+                        .blur(radius: 15)
+                        .opacity(0.2)
+                        .cornerRadius(20)
+                }
+                
+                // 主图片层 - 智能选择显示模式
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: usesFillMode ? .fill : .fit)
+                    .frame(height: 180)
+                    .cornerRadius(20)
+            }
+            .rotation3DEffect(
+                .degrees(rotationAngle),
+                axis: (x: 1.0, y: 0.0, z: 0.0),
+                perspective: 0.7
+            )
+            .scaleEffect(scale)
+            .shadow(radius: 6)
+            .zIndex(zIndex)
         }
         .frame(height: 180)
         .padding(.horizontal)
         .padding(.vertical, 10)
+    }
+    
+    // 智能决定是否使用填充模式
+    private func shouldUseFillMode(imageRatio: CGFloat, cardRatio: CGFloat) -> Bool {
+        // 如果图片和卡片宽高比接近（差异小于20%），使用填充模式
+        if abs(imageRatio - cardRatio) / cardRatio < 0.2 {
+            return true
+        }
+        
+        // 如果图片是极端的横向全景图，使用适应模式
+        if imageRatio > 2.5 {
+            return false
+        }
+        
+        // 如果图片是极端的竖向图，使用适应模式
+        if imageRatio < 0.4 {
+            return false
+        }
+        
+        // 默认情况下，如果图片比卡片更"方"，使用填充模式
+        return imageRatio < cardRatio
     }
 }

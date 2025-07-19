@@ -9,6 +9,7 @@ struct WeeksApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .preferredColorScheme(.light) // 设置 SwiftUI 视图首选明亮模式
                 .onAppear {
                     // 请求相册权限
                     PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
