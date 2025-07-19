@@ -17,14 +17,14 @@ import UIKit
 
 
 struct ImageCropper {
-    /// Widget安全的最大像素面积（约为iOS限制的90%）
+    /// Maximum safe pixel area for Widget (iOS Widget limitation)
     private static let maxWidgetPixelArea: CGFloat = 1900000 // ~1378x1378
     
-    /// 不同尺寸的宽高比
+    /// Aspect ratios for different sizes
     static let mediumAspectRatio: CGFloat = 2.13
     static let largeAspectRatio: CGFloat = 1.0
     
-    /// 根据 Widget 尺寸类型获取对应的宽高比
+    /// Get the corresponding aspect ratio based on Widget size type
     static func aspectRatio(for sizeType: WidgetSizeType) -> CGFloat {
         switch sizeType {
         case .medium:
@@ -34,102 +34,102 @@ struct ImageCropper {
         }
     }
     
-    /// 根据 Widget 尺寸类型裁剪图片
+    /// Crop image based on Widget size type
     static func cropCenter(of image: UIImage, for sizeType: WidgetSizeType) -> UIImage? {
         let targetRatio = aspectRatio(for: sizeType)
         return cropCenter(of: image, toAspectRatio: targetRatio)
     }
     
-    /// 裁剪并缩放UIImage到指定宽高比例，同时确保Widget兼容性
+    /// Crop and scale UIImage to specified aspect ratio while ensuring Widget compatibility
     static func cropCenter(of image: UIImage, toAspectRatio ratio: CGFloat) -> UIImage? {
         let originalSize = image.size
         let originalScale = image.scale
-        print("🔍 ImageCropper开始处理:")
-        print("   原始尺寸(点): \(originalSize)")
-        print("   原始scale: \(originalScale)")
-        print("   实际像素: \(originalSize.width * originalScale) x \(originalSize.height * originalScale)")
-        print("   实际像素面积: \(Int(originalSize.width * originalScale * originalSize.height * originalScale))")
+        print("🔍 ImageCropper processing started:")
+        print("   Original size (points): \(originalSize)")
+        print("   Original scale: \(originalScale)")
+        print("   Actual pixels: \(originalSize.width * originalScale) x \(originalSize.height * originalScale)")
+        print("   Actual pixel area: \(Int(originalSize.width * originalScale * originalSize.height * originalScale))")
         
         let originalRatio = originalSize.width / originalSize.height
 
         var cropRect: CGRect
 
         if originalRatio > ratio {
-            // 图片太宽，裁掉两侧
+            // Image is too wide, crop the sides
             let newWidth = originalSize.height * ratio
             let x = (originalSize.width - newWidth) / 2
             cropRect = CGRect(x: x, y: 0, width: newWidth, height: originalSize.height)
         } else {
-            // 图片太高，裁掉上下
+            // Image is too tall, crop top and bottom
             let newHeight = originalSize.width / ratio
             let y = (originalSize.height - newHeight) / 2
             cropRect = CGRect(x: 0, y: y, width: originalSize.width, height: newHeight)
         }
 
-        print("   裁剪区域: \(cropRect)")
+        print("   Crop area: \(cropRect)")
         
         guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return nil }
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
         
-        print("   裁剪后尺寸(点): \(croppedImage.size)")
-        print("   裁剪后实际像素: \(croppedImage.size.width * croppedImage.scale) x \(croppedImage.size.height * croppedImage.scale)")
+        print("   Size after cropping (points): \(croppedImage.size)")
+        print("   Actual pixels after cropping: \(croppedImage.size.width * croppedImage.scale) x \(croppedImage.size.height * croppedImage.scale)")
         
-        // 检查是否需要缩放以适应Widget限制
+        // Check if scaling is needed to fit Widget limitations
         let result = resizeForWidget(croppedImage, targetRatio: ratio)
-        print("   最终结果尺寸(点): \(result?.size ?? CGSize.zero)")
+        print("   Final result size (points): \(result?.size ?? CGSize.zero)")
         if let result = result {
-            print("   最终结果实际像素: \(result.size.width * result.scale) x \(result.size.height * result.scale)")
+            print("   Final result actual pixels: \(result.size.width * result.scale) x \(result.size.height * result.scale)")
         }
-        print("🔍 ImageCropper处理完成\n")
+        print("🔍 ImageCropper processing completed\n")
         
         return result
     }
     
-    /// 将图片缩放到Widget安全尺寸
-    private static func resizeForWidget(_ image: UIImage, targetRatio: CGFloat) -> UIImage? {
+    /// Scale image to Widget safe size
+    static func resizeForWidget(_ image: UIImage, targetRatio: CGFloat) -> UIImage? {
         let currentSize = image.size
         let currentScale = image.scale
         let currentArea = currentSize.width * currentSize.height
         let actualPixelArea = currentSize.width * currentScale * currentSize.height * currentScale
         
-        print("🔧 resizeForWidget检查:")
-        print("   当前尺寸(点): \(currentSize)")
-        print("   当前scale: \(currentScale)")
-        print("   按点计算面积: \(Int(currentArea))")
-        print("   实际像素面积: \(Int(actualPixelArea))")
-        print("   限制面积: \(Int(maxWidgetPixelArea))")
+        print("🔧 resizeForWidget check:")
+        print("   Current size (points): \(currentSize)")
+        print("   Current scale: \(currentScale)")
+        print("   Area calculated by points: \(Int(currentArea))")
+        print("   Actual pixel area: \(Int(actualPixelArea))")
+        print("   Area limit: \(Int(maxWidgetPixelArea))")
         
-        // 如果当前面积在安全范围内，直接返回
+        // If current area is within safe range, return directly
         if currentArea <= maxWidgetPixelArea {
-            print("   ❌ 按点计算未超限，跳过缩放")
+            print("   ❌ Not exceeding limit by point calculation, skipping scaling")
             return image
         }
         
-        print("   ✅ 按点计算超限，开始缩放")
+        print("   ✅ Exceeding limit by point calculation, starting scaling")
         
-        // 计算缩放因子
+        // Calculate scaling factor
         let scaleFactor = sqrt(maxWidgetPixelArea / currentArea)
         let newWidth = currentSize.width * scaleFactor
         let newHeight = currentSize.height * scaleFactor
         let newSize = CGSize(width: newWidth, height: newHeight)
         
-        print("   缩放因子: \(scaleFactor)")
-        print("   新尺寸(点): \(newSize)")
+        print("   Scaling factor: \(scaleFactor)")
+        print("   New size (points): \(newSize)")
         
-        // 创建新的图片上下文 - 强制使用scale=1.0确保点像素1:1对应
+        // Create new image context - force scale=1.0 to ensure 1:1 point-to-pixel mapping
         UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
         defer { UIGraphicsEndImageContext() }
         
         image.draw(in: CGRect(origin: .zero, size: newSize))
         
         guard let resizedImage = UIGraphicsGetImageFromCurrentImageContext() else {
-            print("   ❌ 缩放失败，返回原图")
-            return image // 如果缩放失败，返回原图
+            print("   ❌ Scaling failed, returning original image")
+            return image // If scaling fails, return the original image
         }
         
-        print("   ✅ 缩放成功")
-        print("   最终尺寸(点): \(resizedImage.size)")
-        print("   最终实际像素: \(resizedImage.size.width * resizedImage.scale) x \(resizedImage.size.height * resizedImage.scale)")
+        print("   ✅ Scaling successful")
+        print("   Final size (points): \(resizedImage.size)")
+        print("   Final actual pixels: \(resizedImage.size.width * resizedImage.scale) x \(resizedImage.size.height * resizedImage.scale)")
         return resizedImage
     }
 }

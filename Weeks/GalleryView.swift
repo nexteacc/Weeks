@@ -98,7 +98,7 @@ struct GalleryView: View {
                 Text("No Images")
                     .foregroundColor(.gray)
                     .onAppear {
-                        // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                        // Use DispatchQueue.main.async to ensure dismiss is executed after UI updates
                         DispatchQueue.main.async {
                             dismiss()
                         }
@@ -122,27 +122,27 @@ struct GalleryView: View {
                     .frame(width: screenWidth * 0.25)
                     .padding(.top, screenHeight / 3)
 
-                    // 右侧区域使用VStack布局
+                    // Right area using VStack layout
                     VStack(spacing: 0) {
-                        // 顶部区域：清空按钮
+                        // Top area: Clear button
                         HStack {
                             Spacer()
                             Button {
-                                // 显示确认对话框
+                                // Show confirmation dialog
                                 let alert = UIAlertController(title: "Confirm Clear", message: "Are you sure you want to clear all images?", preferredStyle: .alert)
                                 alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
                                 alert.addAction(UIAlertAction(title: "Confirm", style: .destructive) { _ in
-                                    // 清空所有图片
+                                    // Clear all images
                                     _ = ImageManager.shared.clearAllImages()
-                                    // 刷新所有图片
+                                    // Refresh all images
                                     let all = ImageManager.shared.getAllImages().map { $0.image }
                                     uiImages = all
-                                    // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                                    // Use DispatchQueue.main.async to ensure dismiss is executed after UI updates
                                     DispatchQueue.main.async {
                                         dismiss()
                                     }
                                 })
-                                // 显示对话框
+                                // Display the dialog
                                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                                    let rootViewController = windowScene.windows.first?.rootViewController {
                                     rootViewController.present(alert, animated: true)
@@ -156,9 +156,9 @@ struct GalleryView: View {
                             Spacer()
                         }
                         .padding(.top, 10)
-                        .padding(.bottom, 15) // 添加与图片区域的间距
+                        .padding(.bottom, 15) // Add spacing between button and image area
                         
-                        // 中间区域：图片滚动区域
+                        // Middle area: Image scrolling section
                         ScrollView {
                             VStack(spacing: 0) {
                                 ForEach(Array(uiImages.enumerated()), id: \.offset) { (index, img) in
@@ -168,14 +168,14 @@ struct GalleryView: View {
                             .padding(.vertical, 20)
                         }
                         
-                        // 底部区域：添加按钮和图片计数
+                        // Bottom area: Add button and image counter
                         VStack(spacing: 10) {
-                            // 添加按钮
+                            // Add button
                             if !ImageManager.shared.isMaxImageCountReached() {
                                 HStack {
                                     Spacer()
                                     ZStack {
-                                        // 动画效果层
+                                        // Animation effect layer
                                         if isPawAnimating {
                                             Image("paw")
                                                 .resizable()
@@ -186,7 +186,7 @@ struct GalleryView: View {
                                                 .allowsHitTesting(false)
                                         }
                                         
-                                        // 实际交互层
+                                        // Actual interaction layer
                                         PhotosPicker(selection: $selectedItems, maxSelectionCount: 30 - uiImages.count, matching: .images) {
                                             Image("paw")
                                                 .resizable()
@@ -194,7 +194,7 @@ struct GalleryView: View {
                                                 .frame(width: 40, height: 40)
                                         }
                                         .onTapGesture {
-                                            // 触发动画
+                                            // Trigger animation
                                             isPawAnimating = true
                                             animationProgress = 0
                                             
@@ -202,7 +202,7 @@ struct GalleryView: View {
                                                 animationProgress = -20
                                             }
                                             
-                                            // 动画结束后重置
+                                            // Reset after animation completes
                                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                                                 isPawAnimating = false
                                                 animationProgress = 0
@@ -211,10 +211,10 @@ struct GalleryView: View {
                                     }
                                     Spacer()
                                 }
-                                .padding(.top, 15) // 添加与图片区域的间距
+                                .padding(.top, 15) // Add spacing with the image area
                             }
                             
-                            // 图片计数
+                            // Image counter
                             Text("\(uiImages.count) / 30")
                                 .foregroundColor(.gray)
                                 .font(.caption)
@@ -230,7 +230,7 @@ struct GalleryView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        // 使用DispatchQueue.main.async确保在UI更新完成后执行dismiss
+                        // Use DispatchQueue.main.async to ensure dismiss is executed after UI updates
                         DispatchQueue.main.async {
                             dismiss()
                         }
@@ -262,17 +262,18 @@ struct GalleryView: View {
                     var results: [UIImage] = []
                     for item in selectedItems {
                         if let data = try? await item.loadTransferable(type: Data.self),
-                           let image = UIImage(data: data),
-                           let cropped = ImageCropper.cropCenter(of: image, toAspectRatio: 2.13) {
-                            results.append(cropped)
+                           let image = UIImage(data: data) {
+                            results.append(image)
                         }
                     }
                     if !results.isEmpty {
-                        _ = ImageManager.shared.saveImages(results)
-                        // 刷新所有图片
-                        DispatchQueue.main.async {
-                            let all = ImageManager.shared.getAllImages().map { $0.image }
-                            uiImages = all
+                        // Save images using smart cropping
+                        ImageManager.shared.saveImages(results) { savedIDs in
+                            // Refresh all images
+                            DispatchQueue.main.async {
+                                let all = ImageManager.shared.getAllImages().map { $0.image }
+                                uiImages = all
+                            }
                         }
                     }
                     selectedItems = []
@@ -282,7 +283,7 @@ struct GalleryView: View {
     }
 }
 
-// 新增图片卡片子组件，简化主视图表达式
+// Added image card subcomponent to simplify the main view expression
 struct GalleryImageCard: View {
     let image: UIImage
     let index: Int
@@ -293,7 +294,7 @@ struct GalleryImageCard: View {
             let normalized = (cardMidY - scrollMidY) / geo.size.height
             let rotationAngle = Double(normalized * 20)
             let scale = max(1 - abs(normalized) * 0.2, 0.8)
-            // 完全不透明显示图片，保留3D效果但不影响图片清晰度
+            // Fully opaque image display, preserving 3D effect without affecting image clarity
             let opacity = 1.0
             let zIndex = Double(1 - abs(normalized))
             Image(uiImage: image)

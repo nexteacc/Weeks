@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!--
-   Info.plist
-   Weeks
-
-   Created by Sheng on 7/19/25.
-   Copyright (c) 2025 ___ORGANIZATIONNAME___. All rights reserved.
--->
 <plist version="1.0">
-<dict/>
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Weeks</string>
+	<key>UIUserInterfaceStyle</key>
+	<string>Light</string>
+	<!-- 相册访问权限（必需） -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Weeks需要访问您的相册以选择图片，这些图片将用于创建每周展示的Widget。</string>
+	<!-- 推送通知权限（已在entitlements中配置） -->
+	<key>NSUserNotificationUsageDescription</key>
+	<string>Weeks希望发送通知以提醒您查看或更新每周图片。</string>
+	<!-- App Groups配置（已在entitlements中配置） -->
+	<key>AppGroupIdentifier</key>
+	<string>group.com.nextbigtoy.weeks</string>
+</dict>
 </plist>

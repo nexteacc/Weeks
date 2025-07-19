@@ -10,50 +10,50 @@ import Foundation
 import UIKit
 import WidgetKit
 
-// Widget 尺寸类型枚举
+// Widget size type enumeration
 enum WidgetSizeType: String, Codable {
     case medium
     case large
 }
 
-// 图片元数据结构
+// Image metadata structure
 struct ImageMetadata: Codable {
-    let id: String // UUID 字符串
-    let addedDate: Date // 添加时间
-    let order: Int // 顺序号
-    let sizeType: WidgetSizeType // Widget 尺寸类型
+    let id: String // UUID string
+    let addedDate: Date // Date added
+    let order: Int // Order number
+    let sizeType: WidgetSizeType // Widget size type
 }
 
-// 图片管理器
+// Image manager
 class ImageManager {
-    // 单例模式
+    // Singleton pattern
     static let shared = ImageManager()
     
-    // App Group 标识符
+    // App Group identifier
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
-    // 最大图片数量限制
+    // Maximum image count limit
     private let maxImageCount = 30
     
-    // 私有初始化方法
+    // Private initialization method
     private init() {}
     
-    // 获取共享容器 URL
+    // Get shared container URL
     private func getSharedContainerURL() -> URL? {
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
     }
     
-    // 获取图片存储目录
+    // Get image storage directory
     private func getImagesDirectoryURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         let imagesURL = containerURL.appendingPathComponent("Images/\(sizeType.rawValue)", isDirectory: true)
         
-        // 确保目录存在
+        // Ensure directory exists
         if !FileManager.default.fileExists(atPath: imagesURL.path) {
             do {
                 try FileManager.default.createDirectory(at: imagesURL, withIntermediateDirectories: true)
             } catch {
-                print("创建图片目录失败: \(error)")
+                print("Failed to create image directory: \(error)")
                 return nil
             }
         }
@@ -61,132 +61,202 @@ class ImageManager {
         return imagesURL
     }
     
-    // 已删除兼容旧版本的getImagesDirectoryURL()方法
+    // Removed compatibility method for old version of getImagesDirectoryURL()
     
-    // 获取元数据文件 URL
+    // Get metadata file URL
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
     
-    // 已删除兼容旧版本的getMetadataFileURL()方法
+    // Removed compatibility method for old version of getMetadataFileURL()
     
-    // 保存图片（为所有尺寸保存独立图片）
-    func saveImage(_ image: UIImage) -> String? {
-        // 为 medium 尺寸保存图片
-        let mediumID = saveImageWithoutReload(image, for: .medium)
+    // Save image (save independent images for all sizes)
+    func saveImage(_ image: UIImage, completion: @escaping (String?) -> Void) {
+        let group = DispatchGroup()
+        var mediumID: String?
         
-        // 为 large 尺寸保存图片
-        _ = saveImageWithoutReload(image, for: .large)
-        
-        // 延迟刷新Widget，确保文件系统操作完成
-        // 使用更长的延迟时间
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            WidgetCenter.shared.reloadAllTimelines()
-            
-            // 添加二次刷新机制，确保 Widget 能够正确更新
-            // 特别是对于 large 尺寸的 Widget
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                WidgetCenter.shared.reloadAllTimelines()
-            }
+        // Save image for medium size
+        group.enter()
+        saveImageWithoutReload(image, for: .medium) { id in
+            mediumID = id
+            group.leave()
         }
         
-        // 返回 medium 尺寸的图片 ID（与原有逻辑保持一致）
-        return mediumID
-    }
-    
-    // 为指定尺寸保存图片
-    private func saveImageWithoutReload(_ image: UIImage, for sizeType: WidgetSizeType) -> String? {
-        // 检查是否达到最大数量限制
-        if getImageMetadataList(for: sizeType).count >= maxImageCount {
-            return nil
+        // Save image for large size
+        group.enter()
+        saveImageWithoutReload(image, for: .large) { _ in
+            group.leave()
         }
         
-        // 生成 UUID
-        let imageID = UUID().uuidString
-        
-        // 根据尺寸类型裁剪图片
-        let croppedImage = ImageCropper.cropCenter(of: image, for: sizeType)
-        guard let croppedImage = croppedImage,
-              let imageData = croppedImage.jpegData(compressionQuality: 0.8) else { return nil }
-        
-        // 获取对应尺寸的图片目录
-        guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return nil }
-        let imageURL = imagesDirectory.appendingPathComponent("\(imageID).jpg")
-        
-        do {
-            try imageData.write(to: imageURL)
-            
-            // 验证文件完整性：确保文件存在且大小正确
-            guard FileManager.default.fileExists(atPath: imageURL.path),
-                  let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
-                  let fileSize = fileAttributes[.size] as? Int64,
-                  fileSize == imageData.count else {
-                print("图片文件写入验证失败")
-                return nil
-            }
-            
-        } catch {
-            print("保存图片失败: \(error)")
-            return nil
-        }
-        
-        // 更新元数据
-        var metadataList = getImageMetadataList(for: sizeType)
-        let newMetadata = ImageMetadata(
-            id: imageID,
-            addedDate: Date(),
-            order: metadataList.count,
-            sizeType: sizeType
-        )
-        metadataList.append(newMetadata)
-        
-        // 保存更新后的元数据
-        guard saveImageMetadataList(metadataList, for: sizeType) else {
-            print("保存元数据失败")
-            return nil
-        }
-        
-        return imageID
-    }
-    
-    // 批量保存图片
-    func saveImages(_ images: [UIImage]) -> [String] {
-        var savedIDs: [String] = []
-        
-        for image in images {
-            // 为 medium 尺寸保存图片
-            if let id = saveImageWithoutReload(image, for: .medium) {
-                savedIDs.append(id)
-                
-                // 同时为 large 尺寸保存图片
-                _ = saveImageWithoutReload(image, for: .large)
-            }
-            
-            // 如果达到最大数量限制，停止保存
-            if getImageMetadataList(for: .medium).count >= maxImageCount {
-                break
-            }
-        }
-        
-        // 批量保存完成后，统一刷新Widget
-        if !savedIDs.isEmpty {
-            // 使用更长的延迟时间
+        // Wait for all save operations to complete
+        group.notify(queue: .main) {
+            // Delay widget refresh to ensure file system operations are complete
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 WidgetCenter.shared.reloadAllTimelines()
                 
-                // 添加二次刷新机制，确保 Widget 能够正确更新
-                // 特别是对于 large 尺寸的 Widget
+                // Add secondary refresh mechanism to ensure Widget updates correctly
+                // Especially for large size Widgets
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     WidgetCenter.shared.reloadAllTimelines()
                 }
             }
+            
+            // Return medium size image ID (consistent with original logic)
+            completion(mediumID)
         }
-        
-        return savedIDs
     }
     
-    // 已删除兼容旧版本的saveImageWithoutReload方法
+    // Save image for specified size (smart cropping version)
+    private func saveImageWithoutReload(
+        _ image: UIImage, 
+        for sizeType: WidgetSizeType, 
+        completion: @escaping (String?) -> Void
+    ) {
+        // Check if maximum count limit is reached
+        if getImageMetadataList(for: sizeType).count >= maxImageCount {
+            completion(nil)
+            return
+        }
+        
+        // Generate UUID
+        let imageID = UUID().uuidString
+        
+        // Use smart cropping
+        SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
+            guard let self = self,
+                  let croppedImage = croppedImage,
+                  let imageData = croppedImage.jpegData(compressionQuality: 0.8) else {
+                completion(nil)
+                return
+            }
+            
+            // Get image directory for corresponding size
+            guard let imagesDirectory = self.getImagesDirectoryURL(for: sizeType) else {
+                completion(nil)
+                return
+            }
+            
+            let imageURL = imagesDirectory.appendingPathComponent("\(imageID).jpg")
+            
+            do {
+                try imageData.write(to: imageURL)
+                
+                // Verify file integrity: ensure file exists and size is correct
+                guard FileManager.default.fileExists(atPath: imageURL.path),
+                      let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
+                      let fileSize = fileAttributes[.size] as? Int64,
+                      fileSize == imageData.count else {
+                    print("Image file write verification failed")
+                    completion(nil)
+                    return
+                }
+                
+            } catch {
+                print("Failed to save image: \(error)")
+                completion(nil)
+                return
+            }
+            
+            // Update metadata
+            var metadataList = self.getImageMetadataList(for: sizeType)
+            let newMetadata = ImageMetadata(
+                id: imageID,
+                addedDate: Date(),
+                order: metadataList.count,
+                sizeType: sizeType
+            )
+            metadataList.append(newMetadata)
+            
+            // Save updated metadata
+            guard self.saveImageMetadataList(metadataList, for: sizeType) else {
+                print("Failed to save metadata")
+                completion(nil)
+                return
+            }
+            
+            completion(imageID)
+        }
+    }
+    
+    // Batch save images
+    func saveImages(_ images: [UIImage], completion: @escaping ([String]) -> Void) {
+        let group = DispatchGroup()
+        var savedIDs: [String] = []
+        let lock = NSLock()
+        
+        for image in images {
+            // Check if maximum count limit is reached
+            if getImageMetadataList(for: .medium).count >= maxImageCount {
+                break
+            }
+            
+            // Save image for medium size
+            group.enter()
+            saveImageWithoutReload(image, for: .medium) { id in
+                if let id = id {
+                    lock.lock()
+                    savedIDs.append(id)
+                    lock.unlock()
+                }
+                group.leave()
+            }
+            
+            // Simultaneously save image for large size
+            group.enter()
+            saveImageWithoutReload(image, for: .large) { _ in
+                group.leave()
+            }
+        }
+        
+        // Wait for all save operations to complete
+        group.notify(queue: .main) {
+            // Refresh Widget after batch save is complete
+            if !savedIDs.isEmpty {
+                // Use longer delay time
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    WidgetCenter.shared.reloadAllTimelines()
+                    
+                    // Add secondary refresh mechanism to ensure Widget updates correctly
+                    // Especially for large size Widgets
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        WidgetCenter.shared.reloadAllTimelines()
+                    }
+                }
+            }
+            
+            completion(savedIDs)
+        }
+    }
+    
+    // Compatibility method for old version (deprecated)
+    @available(*, deprecated, message: "Use async version with completion handler")
+    func saveImage(_ image: UIImage) -> String? {
+        var result: String?
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        saveImage(image) { id in
+            result = id
+            semaphore.signal()
+        }
+        
+        semaphore.wait()
+        return result
+    }
+    
+    @available(*, deprecated, message: "Use async version with completion handler")
+    func saveImages(_ images: [UIImage]) -> [String] {
+        var result: [String] = []
+        let semaphore = DispatchSemaphore(value: 0)
+        
+        saveImages(images) { ids in
+            result = ids
+            semaphore.signal()
+        }
+        
+        semaphore.wait()
+        return result
+    }
     
 
     
@@ -198,42 +268,42 @@ class ImageManager {
     
 
     
-    // 清空所有图片（清空所有尺寸的图片）- 原子性操作版本
+    // Clear all images (clear images of all sizes) - atomic operation version
     func clearAllImages() -> Bool {
-        // 使用操作锁确保原子性
+        // Use operation lock to ensure atomicity
         let operationLock = NSLock()
         operationLock.lock()
         defer { operationLock.unlock() }
         
-        // 1. 获取所有图片ID
+        // 1. Get all image IDs
         let mediumList = getImageMetadataList(for: .medium)
         let largeList = getImageMetadataList(for: .large)
         
         if mediumList.isEmpty && largeList.isEmpty {
-            print("清空操作: 没有图片需要删除")
+            print("Clear operation: No images to delete")
             return true
         }
         
-        // 2. 原子性清空元数据
+        // 2. Atomically clear metadata
         var success = true
         success = success && saveImageMetadataList([], for: .medium)
         success = success && saveImageMetadataList([], for: .large)
         
         if !success {
-            print("清空失败: 元数据清空失败")
+            print("Clear failed: Metadata clearing failed")
             return false
         }
         
-        // 3. 删除所有图片文件
+        // 3. Delete all image files
         success = success && clearAllImageFiles(for: .medium)
         success = success && clearAllImageFiles(for: .large)
         
         if !success {
-            print("清空失败: 图片文件删除失败")
+            print("Clear failed: Image file deletion failed")
             return false
         }
         
-        // 4. 延迟刷新Widget，确保文件系统操作完成
+        // 4. Delay Widget refresh to ensure file system operations are complete
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             WidgetCenter.shared.reloadAllTimelines()
         }
@@ -241,7 +311,7 @@ class ImageManager {
         return true
     }
     
-    // 清空指定尺寸的所有图片文件
+    // Clear all image files for specified size
     private func clearAllImageFiles(for sizeType: WidgetSizeType) -> Bool {
         guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return false }
         
@@ -252,22 +322,22 @@ class ImageManager {
                     try FileManager.default.removeItem(at: fileURL)
                 }
             }
-            print("成功清空所有图片文件: 尺寸 \(sizeType.rawValue)")
+            print("Successfully cleared all image files: size \(sizeType.rawValue)")
             return true
         } catch {
-            print("清空图片文件失败: \(error)")
+            print("Failed to clear image files: \(error)")
             return false
         }
     }
     
-    // 此处移除了未使用的clearAllImagesWithoutReload方法
+    // Removed unused clearAllImagesWithoutReload method
     
-    // 根据ID获取图片（默认获取 medium 尺寸）
+    // Get image by ID (default gets medium size)
     func getImage(withID id: String) -> UIImage? {
         return getImage(withID: id, for: .medium)
     }
     
-    // 根据ID和尺寸类型获取图片
+    // Get image by ID and size type
     func getImage(withID id: String, for sizeType: WidgetSizeType) -> UIImage? {
         guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return nil }
         let imageURL = imagesDirectory.appendingPathComponent("\(id).jpg")
@@ -279,65 +349,65 @@ class ImageManager {
         return image
     }
     
-    // 获取元数据列表（默认获取 medium 尺寸）
+    // Get metadata list (default gets medium size)
     func getImageMetadataList() -> [ImageMetadata] {
         return getImageMetadataList(for: .medium)
     }
     
-    // 获取指定尺寸的元数据列表
+    // Get metadata list for specified size
     func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
         guard let metadataFileURL = getMetadataFileURL(for: sizeType) else { return [] }
         
-        // 如果元数据文件不存在，返回空数组
+        // If metadata file doesn't exist, return empty array
         if !FileManager.default.fileExists(atPath: metadataFileURL.path) {
             return []
         }
         
         do {
-            // 读取元数据文件
+            // Read metadata file
             let data = try Data(contentsOf: metadataFileURL)
             
-            // 解码JSON数据
+            // Decode JSON data
             let decoder = JSONDecoder()
             let metadataList = try decoder.decode([ImageMetadata].self, from: data)
             
-            // 按顺序排序
+            // Sort by order
             return metadataList.sorted { $0.order < $1.order }
         } catch {
-            print("读取元数据失败: \(error)")
+            print("Failed to read metadata: \(error)")
             return []
         }
     }
     
-    // 保存元数据列表（默认保存 medium 尺寸）
+    // Save metadata list (default saves medium size)
     func saveImageMetadataList(_ metadataList: [ImageMetadata]) -> Bool {
         return saveImageMetadataList(metadataList, for: .medium)
     }
     
-    // 保存指定尺寸的元数据列表
+    // Save metadata list for specified size
     func saveImageMetadataList(_ metadataList: [ImageMetadata], for sizeType: WidgetSizeType) -> Bool {
         guard let metadataFileURL = getMetadataFileURL(for: sizeType) else { return false }
         
         do {
-            // 编码为JSON数据
+            // Encode to JSON data
             let encoder = JSONEncoder()
             let data = try encoder.encode(metadataList)
             
-            // 写入元数据文件
+            // Write to metadata file
             try data.write(to: metadataFileURL)
             return true
         } catch {
-            print("保存元数据失败: \(error)")
+            print("Failed to save metadata: \(error)")
             return false
         }
     }
     
-    // 获取所有图片（按顺序，默认获取 medium 尺寸）
+    // Get all images (in order, default gets medium size)
     func getAllImages() -> [(metadata: ImageMetadata, image: UIImage)] {
         return getAllImages(for: .medium)
     }
     
-    // 获取指定尺寸的所有图片（按顺序）
+    // Get all images for specified size (in order)
     func getAllImages(for sizeType: WidgetSizeType) -> [(metadata: ImageMetadata, image: UIImage)] {
         let metadataList = getImageMetadataList(for: sizeType).sorted { $0.order < $1.order }
         var result: [(metadata: ImageMetadata, image: UIImage)] = []
@@ -351,22 +421,22 @@ class ImageManager {
         return result
     }
     
-    // 获取图片数量（默认获取 medium 尺寸）
+    // Get image count (default gets medium size)
     func getImageCount() -> Int {
         return getImageMetadataList().count
     }
     
-    // 获取指定尺寸的图片数量
+    // Get image count for specified size
     func getImageCount(for sizeType: WidgetSizeType) -> Int {
         return getImageMetadataList(for: sizeType).count
     }
     
-    // 检查是否达到最大数量限制（默认检查 medium 尺寸）
+    // Check if maximum count limit is reached (default checks medium size)
     func isMaxImageCountReached() -> Bool {
         return getImageCount() >= maxImageCount
     }
     
-    // 检查指定尺寸是否达到最大数量限制
+    // Check if maximum count limit is reached for specified size
     func isMaxImageCountReached(for sizeType: WidgetSizeType) -> Bool {
         return getImageCount(for: sizeType) >= maxImageCount
     }

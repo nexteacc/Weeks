@@ -8,22 +8,22 @@ struct ContentView: View {
     @State private var navigateToGallery = false
     @State private var uiImages: [UIImage] = []
     
-    // 自动播放相关状态
+    // Auto-play related state
     @State private var autoPlayTimer: AnyCancellable?
     
-    // 是否已添加过图片的标志
+    // Flag indicating whether images have been added
     @AppStorage("hasAddedImages") private var hasAddedImages = false
     
-    // 标记是否是应用启动时的初始化，用于区分是否需要自动导航
+    // Flag to mark initial app launch, used to determine if automatic navigation is needed
     @State private var isInitialLaunch: Bool
     
-    // 初始化方法，接收hasAddedImages参数
+    // Initialization method, accepts hasAddedImages parameter
     init(hasAddedImages: Bool = false) {
-        // 如果传入了hasAddedImages参数为true，则更新@AppStorage的值
+        // If hasAddedImages parameter is true, update the @AppStorage value
         if hasAddedImages {
             UserDefaults.standard.set(true, forKey: "hasAddedImages")
         }
-        // 初始化时标记为应用启动
+        // Mark as app launch during initialization
         self._isInitialLaunch = State(initialValue: true)
     }
    
@@ -86,34 +86,34 @@ struct ContentView: View {
             .navigationDestination(isPresented: $navigateToGallery) {
                 GalleryView(uiImages: $uiImages)
                     .onDisappear {
-                        // 当GalleryView消失时，确保状态正确更新
+                        // When GalleryView disappears, ensure the state is correctly updated
                         if uiImages.isEmpty {
                             hasAddedImages = false
                         }
                     }
             }
             .onAppear {
-                // 加载所有图片
+                // Load all images
                 let all = ImageManager.shared.getAllImages().map { $0.image }
                 uiImages = all
                 
-                // 更新hasAddedImages状态
+                // Update hasAddedImages state
                 if !all.isEmpty {
                     hasAddedImages = true
                 } else {
                     hasAddedImages = false
                 }
                 
-                // 只在应用启动时且有图片时自动导航到Gallery页面
+                // Only auto-navigate to Gallery page during app launch if images exist
                 if isInitialLaunch && hasAddedImages && !all.isEmpty {
-                    // 使用DispatchQueue.main.async确保在UI更新完成后设置导航状态
+                    // Use DispatchQueue.main.async to ensure navigation state is set after UI updates
                     DispatchQueue.main.async {
                         navigateToGallery = true
-                        // 导航后标记不再是初始启动
+                        // Mark as no longer initial launch after navigation
                         isInitialLaunch = false
                     }
                 } else {
-                    // 如果不是初始启动或没有图片，确保导航状态为false
+                    // If not initial launch or no images, ensure navigation state is false
                     navigateToGallery = false
                     isInitialLaunch = false
                 }
@@ -129,26 +129,24 @@ struct ContentView: View {
                     var results: [UIImage] = []
                     for item in selectedItems {
                         if let data = try? await item.loadTransferable(type: Data.self),
-                           let image = UIImage(data: data),
-                           let cropped = ImageCropper.cropCenter(of: image, toAspectRatio: 2.13) {
-                            results.append(cropped)
+                           let image = UIImage(data: data) {
+                            results.append(image)
                         }
                     }
                     if !results.isEmpty {
-                        // 保存图片
-                        _ = ImageManager.shared.saveImages(results)
-
-                        // 更新图片列表
-                        let all = ImageManager.shared.getAllImages().map { $0.image }
-                        uiImages = all
-                        
-                        // 设置已添加图片标志
-                        hasAddedImages = true
-                        
-                        // 使用DispatchQueue.main.async确保在UI更新完成后设置导航状态
-                        DispatchQueue.main.async {
-                            // 导航到Gallery页面
-                            navigateToGallery = true
+                        // Save images using smart cropping
+                        ImageManager.shared.saveImages(results) { savedIDs in
+                            DispatchQueue.main.async {
+                                // Update image list
+                                let all = ImageManager.shared.getAllImages().map { $0.image }
+                                uiImages = all
+                                
+                                // Set flag indicating images have been added
+                                hasAddedImages = true
+                                
+                                // Navigate to Gallery page
+                                navigateToGallery = true
+                            }
                         }
                     }
                     selectedItems = []
