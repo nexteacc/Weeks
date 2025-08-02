@@ -12,8 +12,14 @@ import WidgetKit
 
 // Widget size type enumeration
 enum WidgetSizeType: String, Codable {
-    case medium
     case large
+
+    // 兼容旧版本：如遇到未知值（如 medium）时回退到 large
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = (try? container.decode(String.self)) ?? WidgetSizeType.large.rawValue
+        self = WidgetSizeType(rawValue: raw) ?? .large
+    }
 }
 
 // Image metadata structure
@@ -83,15 +89,12 @@ class ImageManager {
         return imagesURL
     }
     
-    // Removed compatibility method for old version of getImagesDirectoryURL()
-    
+
     // Get metadata file URL
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
-    
-    // Removed compatibility method for old version of getMetadataFileURL()
     
     // Save image (save independent images for all sizes)
     func saveImage(_ image: UIImage, completion: @escaping (String?) -> Void) {
@@ -112,16 +115,10 @@ class ImageManager {
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
             
-            // Save image for medium size
+            // Save image (large size only)
             group.enter()
-            self.saveImageWithoutReload(image, for: .medium) { id in
-                mediumID = id
-                group.leave()
-            }
-            
-            // Save image for large size
-            group.enter()
-            self.saveImageWithoutReload(image, for: .large) { _ in
+            self.saveImageWithoutReload(image, for: .large) { id in
+                mediumID = id // 返回 large 尺寸 ID
                 group.leave()
             }
             
@@ -210,10 +207,8 @@ class ImageManager {
         let imageID = UUID().uuidString
         print("开始处理图片，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
         
-        // 如果是medium尺寸，先保存原始图片（在裁剪前）
-        if sizeType == .medium {
-            saveOriginalImage(image, withID: imageID)
-        }
+        // 保存原始图片（在裁剪前）
+        saveOriginalImage(image, withID: imageID)
         
         // Use smart cropping
         SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
@@ -303,7 +298,7 @@ class ImageManager {
             }
             
             // Track how many images we can actually save
-            let availableSlots = self.maxImageCount - self.getImageMetadataList(for: .medium).count
+            let availableSlots = self.maxImageCount - self.getImageMetadataList(for: .large).count
             let imagesToProcess = availableSlots > 0 ? Array(images.prefix(availableSlots)) : []
             
             // If we can't save any images, return immediately
@@ -325,20 +320,14 @@ class ImageManager {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
             
             for image in imagesToProcess {
-                // Save image for medium size
+                // Save image (large size only)
                 group.enter()
-                self.saveImageWithoutReload(image, for: .medium) { id in
+                self.saveImageWithoutReload(image, for: .large) { id in
                     if let id = id {
                         lock.lock()
                         savedIDs.append(id)
                         lock.unlock()
                     }
-                    group.leave()
-                }
-                
-                // Simultaneously save image for large size
-                group.enter()
-                self.saveImageWithoutReload(image, for: .large) { _ in
                     group.leave()
                 }
             }
@@ -411,7 +400,7 @@ class ImageManager {
         defer { operationLock.unlock() }
         
         // 1. Get all image IDs
-        let mediumList = getImageMetadataList(for: .medium)
+        let mediumList = getImageMetadataList(for: .large)
         let largeList = getImageMetadataList(for: .large)
         
         if mediumList.isEmpty && largeList.isEmpty {
@@ -421,7 +410,7 @@ class ImageManager {
         
         // 2. Atomically clear metadata
         var success = true
-        success = success && saveImageMetadataList([], for: .medium)
+        success = success && saveImageMetadataList([], for: .large)
         success = success && saveImageMetadataList([], for: .large)
         
         if !success {
@@ -430,7 +419,7 @@ class ImageManager {
         }
         
         // 3. Delete all image files
-        success = success && clearAllImageFiles(for: .medium)
+        success = success && clearAllImageFiles(for: .large)
         success = success && clearAllImageFiles(for: .large)
         success = success && clearAllOriginalImageFiles() // 添加清理原始图片
         
@@ -489,7 +478,7 @@ class ImageManager {
     
     // Get image by ID (default gets medium size)
     func getImage(withID id: String) -> UIImage? {
-        return getImage(withID: id, for: .medium)
+        return getImage(withID: id, for: .large)
     }
     
     // Get image by ID and size type
@@ -506,7 +495,7 @@ class ImageManager {
     
     // Get metadata list (default gets medium size)
     func getImageMetadataList() -> [ImageMetadata] {
-        return getImageMetadataList(for: .medium)
+        return getImageMetadataList(for: .large)
     }
     
     // Get metadata list for specified size
@@ -536,7 +525,7 @@ class ImageManager {
     
     // Save metadata list (default saves medium size)
     func saveImageMetadataList(_ metadataList: [ImageMetadata]) -> Bool {
-        return saveImageMetadataList(metadataList, for: .medium)
+        return saveImageMetadataList(metadataList, for: .large)
     }
     
     // Save metadata list for specified size
@@ -559,7 +548,7 @@ class ImageManager {
     
     // Get all original images (in order)
     func getAllOriginalImages() -> [(metadata: ImageMetadata, image: UIImage)] {
-        let metadataList = getImageMetadataList(for: .medium).sorted { $0.order < $1.order }
+        let metadataList = getImageMetadataList(for: .large).sorted { $0.order < $1.order }
         var result: [(metadata: ImageMetadata, image: UIImage)] = []
         
         for metadata in metadataList {
@@ -574,7 +563,7 @@ class ImageManager {
     
     // Get all images (in order, default gets medium size)
     func getAllImages() -> [(metadata: ImageMetadata, image: UIImage)] {
-        return getAllImages(for: .medium)
+        return getAllImages(for: .large)
     }
     
     // Get all images for specified size (in order)

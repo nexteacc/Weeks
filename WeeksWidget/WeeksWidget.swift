@@ -10,8 +10,14 @@ import SwiftUI
 
 // Widget 尺寸类型枚举（与App中保持一致）
 enum WidgetSizeType: String, Codable {
-    case medium
     case large
+
+    // 兼容旧版本：如遇到未知值（如 medium）时回退到 large
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let raw = (try? container.decode(String.self)) ?? WidgetSizeType.large.rawValue
+        self = WidgetSizeType(rawValue: raw) ?? .large
+    }
 }
 
 // 图片元数据结构（与App中保持一致）
@@ -180,8 +186,8 @@ struct Provider: TimelineProvider {
         switch family {
         case .systemLarge:
             return .large
-        default: // .systemMedium 和其他情况
-            return .medium
+        default: // 统一使用 large 尺寸
+            return .large
         }
     }
 }
@@ -196,7 +202,7 @@ struct WeeksWidget: Widget {
         }
         .configurationDisplayName("Weeks")
         .description("Display weekly featured images")
-        .supportedFamilies([.systemMedium, .systemLarge])
+        .supportedFamilies([.systemLarge])
     }
 }
 
@@ -220,8 +226,8 @@ struct WeeksWidgetEntryView : View {
         switch family {
         case .systemLarge:
             return .large
-        default: // .systemMedium 和其他情况
-            return .medium
+        default: // 统一使用 large 尺寸
+            return .large
         }
     }
     

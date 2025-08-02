@@ -5,14 +5,6 @@
 //  Created by Sheng on 7/4/25.
 //
 
-
-//
-//  ImageCropper.swift
-//  weekofyear
-//
-//  Created by Sheng on 7/4/25.
-//
-
 import UIKit
 
 
@@ -20,18 +12,12 @@ struct ImageCropper {
     /// Maximum safe pixel area for Widget (iOS Widget limitation)
     private static let maxWidgetPixelArea: CGFloat = 1900000 // ~1378x1378
     
-    /// Aspect ratios for different sizes
-    static let mediumAspectRatio: CGFloat = 2.13
-    static let largeAspectRatio: CGFloat = 1.0
-    
-    /// Get the corresponding aspect ratio based on Widget size type
+    /// Aspect ratio for the only supported Widget size (large)
+    private static let largeAspectRatio: CGFloat = 1.0
+
+    /// Get aspect ratio – legacy parameter kept for compatibility
     static func aspectRatio(for sizeType: WidgetSizeType) -> CGFloat {
-        switch sizeType {
-        case .medium:
-            return mediumAspectRatio
-        case .large:
-            return largeAspectRatio
-        }
+        return largeAspectRatio // medium 已弃用，统一使用 large 比例 1:1
     }
     
     /// Crop image based on Widget size type
