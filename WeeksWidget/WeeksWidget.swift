@@ -46,7 +46,7 @@ struct WeeksEntry: TimelineEntry {
 
 // Widget 提供者
 struct Provider: TimelineProvider {
-    // App Group 标识符
+    // App Group 标识符 - 与entitlements文件中的ID保持一致
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
     // 获取共享容器 URL
@@ -71,23 +71,18 @@ struct Provider: TimelineProvider {
     // 获取指定尺寸的所有图片元数据
     private func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
         guard let metadataURL = getMetadataFileURL(for: sizeType) else { 
-            print("Widget Log: 获取元数据文件URL失败")
             return [] 
         }
-        print("Widget Log: 元数据文件路径: \(metadataURL.path)")
         
         guard FileManager.default.fileExists(atPath: metadataURL.path) else { 
-            print("Widget Log: 元数据文件不存在")
             return [] 
         }
         
         do {
             let data = try Data(contentsOf: metadataURL)
             let metadataList = try JSONDecoder().decode([ImageMetadata].self, from: data)
-            print("Widget Log: 成功读取 \(metadataList.count) 条元数据")
             return metadataList.sorted { $0.order < $1.order }
         } catch {
-            print("Widget Log: 读取或解码元数据失败: \(error)")
             return []
         }
     }
@@ -158,7 +153,6 @@ struct Provider: TimelineProvider {
     // 验证图片元数据和文件的一致性
     private func validateImageMetadata(_ metadataList: [ImageMetadata], for sizeType: WidgetSizeType) -> [ImageMetadata] {
         guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else {
-            print("Widget验证: 无法获取图片目录")
             return []
         }
         
@@ -166,17 +160,12 @@ struct Provider: TimelineProvider {
             let imageURL = imagesDirectory.appendingPathComponent("\(metadata.id).jpg")
             let fileExists = FileManager.default.fileExists(atPath: imageURL.path)
             
-            if !fileExists {
-                print("Widget验证: 图片文件不存在 - ID: \(metadata.id), 尺寸: \(sizeType.rawValue)")
-            }
+            // File validation - no logging needed in production
             
             return fileExists
         }
         
-        // 如果验证后的列表与原列表不同，说明存在不一致，记录日志
-        if validatedList.count != metadataList.count {
-            print("Widget验证: 发现数据不一致，原始数量: \(metadataList.count), 验证后数量: \(validatedList.count)")
-        }
+        // Data consistency validation completed
         
         return validatedList
     }
@@ -211,7 +200,7 @@ struct WeeksWidgetEntryView : View {
     var entry: Provider.Entry
     @Environment(\.redactionReasons) private var redactionReasons
     
-    // App Group 标识符
+    // App Group 标识符 - 与entitlements文件中的ID保持一致
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
     // 获取图片（根据 Widget 尺寸加载对应的图片）
@@ -234,17 +223,14 @@ struct WeeksWidgetEntryView : View {
     // 获取指定尺寸的图片
     private func loadImage(withID id: String, for sizeType: WidgetSizeType) -> UIImage? {
         guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
-            print("Widget Log: 获取共享容器URL失败")
             return nil
         }
         
         let imagesDirectory = containerURL.appendingPathComponent("Images/\(sizeType.rawValue)")
         let imageURL = imagesDirectory.appendingPathComponent("\(id).jpg")
-        print("Widget Log: 尝试加载图片路径: \(imageURL.path)")
         
         // 检查文件是否存在
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
-            print("Widget Log: 图片文件不存在")
             return nil
         }
         
@@ -252,24 +238,20 @@ struct WeeksWidgetEntryView : View {
         guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
               let fileSize = fileAttributes[.size] as? Int64,
               fileSize > 0 else {
-            print("Widget Log: 图片文件大小无效")
             return nil
         }
         
         // 尝试读取文件数据
         guard let imageData = try? Data(contentsOf: imageURL),
               imageData.count > 0 else {
-            print("Widget Log: 加载图片数据失败")
             return nil
         }
         
         // 验证数据完整性：确保可以创建UIImage
         guard let image = UIImage(data: imageData) else {
-            print("Widget Log: 图片数据损坏，无法创建UIImage")
             return nil
         }
         
-        print("Widget Log: 成功加载图片ID: \(id), 文件大小: \(imageData.count) bytes, 尺寸类型: \(sizeType.rawValue)")
         return image
     }
     

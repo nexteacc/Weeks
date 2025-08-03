@@ -15,11 +15,11 @@ struct WeeksApp: App {
                     PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
                         switch status {
                         case .authorized, .limited:
-                            print("相册访问权限已授权")
+                            Logger.info("Photo library access authorized", category: .general)
                         case .denied, .restricted:
-                            print("相册访问权限被拒绝")
+                            Logger.warning("Photo library access denied", category: .general)
                         case .notDetermined:
-                            print("相册访问权限未确定")
+                            Logger.info("Photo library access not determined", category: .general)
                         @unknown default:
                             break
                         }
@@ -28,9 +28,9 @@ struct WeeksApp: App {
                     // 请求通知权限
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                         if granted {
-                            print("通知权限已授权")
+                            Logger.info("Notification permission granted", category: .general)
                         } else if let error = error {
-                            print("通知权限错误: \(error.localizedDescription)")
+                            Logger.error("Notification permission error: \(error.localizedDescription)", category: .general)
                         }
                     }
                 }
@@ -50,12 +50,12 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
-        print("设备令牌: \(token)")
+        Logger.info("Device token received: \(token)", category: .general)
         // 这里可以将令牌发送到您的服务器
     }
     
     // 处理注册失败
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("注册远程通知失败: \(error.localizedDescription)")
+        Logger.error("Failed to register for remote notifications: \(error.localizedDescription)", category: .general)
     }
 }

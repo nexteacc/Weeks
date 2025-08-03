@@ -30,11 +30,13 @@ struct ImageCropper {
     static func cropCenter(of image: UIImage, toAspectRatio ratio: CGFloat) -> UIImage? {
         let originalSize = image.size
         let originalScale = image.scale
+        #if DEBUG
         print("🔍 ImageCropper processing started:")
         print("   Original size (points): \(originalSize)")
         print("   Original scale: \(originalScale)")
         print("   Actual pixels: \(originalSize.width * originalScale) x \(originalSize.height * originalScale)")
         print("   Actual pixel area: \(Int(originalSize.width * originalScale * originalSize.height * originalScale))")
+        #endif
         
         let originalRatio = originalSize.width / originalSize.height
 
@@ -52,21 +54,28 @@ struct ImageCropper {
             cropRect = CGRect(x: 0, y: y, width: originalSize.width, height: newHeight)
         }
 
+        #if DEBUG
         print("   Crop area: \(cropRect)")
+        #endif
         
         guard let cgImage = image.cgImage?.cropping(to: cropRect) else { return nil }
         let croppedImage = UIImage(cgImage: cgImage, scale: image.scale, orientation: image.imageOrientation)
         
+        #if DEBUG
         print("   Size after cropping (points): \(croppedImage.size)")
         print("   Actual pixels after cropping: \(croppedImage.size.width * croppedImage.scale) x \(croppedImage.size.height * croppedImage.scale)")
+        #endif
         
         // Check if scaling is needed to fit Widget limitations
         let result = resizeForWidget(croppedImage, targetRatio: ratio)
+        
+        #if DEBUG
         print("   Final result size (points): \(result?.size ?? CGSize.zero)")
         if let result = result {
             print("   Final result actual pixels: \(result.size.width * result.scale) x \(result.size.height * result.scale)")
         }
         print("🔍 ImageCropper processing completed\n")
+        #endif
         
         return result
     }
@@ -78,20 +87,26 @@ struct ImageCropper {
         let currentArea = currentSize.width * currentSize.height
         let actualPixelArea = currentSize.width * currentScale * currentSize.height * currentScale
         
+        #if DEBUG
         print("🔧 resizeForWidget check:")
         print("   Current size (points): \(currentSize)")
         print("   Current scale: \(currentScale)")
         print("   Area calculated by points: \(Int(currentArea))")
         print("   Actual pixel area: \(Int(actualPixelArea))")
         print("   Area limit: \(Int(maxWidgetPixelArea))")
+        #endif
         
         // If current area is within safe range, return directly
         if currentArea <= maxWidgetPixelArea {
+            #if DEBUG
             print("   ❌ Not exceeding limit by point calculation, skipping scaling")
+            #endif
             return image
         }
         
+        #if DEBUG
         print("   ✅ Exceeding limit by point calculation, starting scaling")
+        #endif
         
         // Calculate scaling factor
         let scaleFactor = sqrt(maxWidgetPixelArea / currentArea)
@@ -99,8 +114,10 @@ struct ImageCropper {
         let newHeight = currentSize.height * scaleFactor
         let newSize = CGSize(width: newWidth, height: newHeight)
         
+        #if DEBUG
         print("   Scaling factor: \(scaleFactor)")
         print("   New size (points): \(newSize)")
+        #endif
         
         // Create new image context - force scale=1.0 to ensure 1:1 point-to-pixel mapping
         UIGraphicsBeginImageContextWithOptions(newSize, false, 1.0)
@@ -109,13 +126,17 @@ struct ImageCropper {
         image.draw(in: CGRect(origin: .zero, size: newSize))
         
         guard let resizedImage = UIGraphicsGetImageFromCurrentImageContext() else {
+            #if DEBUG
             print("   ❌ Scaling failed, returning original image")
+            #endif
             return image // If scaling fails, return the original image
         }
         
+        #if DEBUG
         print("   ✅ Scaling successful")
         print("   Final size (points): \(resizedImage.size)")
         print("   Final actual pixels: \(resizedImage.size.width * resizedImage.scale) x \(resizedImage.size.height * resizedImage.scale)")
+        #endif
         return resizedImage
     }
 }

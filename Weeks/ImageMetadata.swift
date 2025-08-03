@@ -35,7 +35,7 @@ class ImageManager {
     // Singleton pattern
     static let shared = ImageManager()
     
-    // App Group identifier
+    // App Group identifier - 与entitlements文件中的ID保持一致
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
     // Maximum image count limit
@@ -214,13 +214,17 @@ class ImageManager {
         SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
             // 检查是否已经完成（可能是由于超时）
             if hasCompleted {
-                print("智能裁剪回调返回，但已超时完成，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                #if DEBUG
+                print("Smart cropping callback returned but already timed out, ID: \(imageID), size: \(sizeType.rawValue)")
+                #endif
                 return
             }
             
             guard let self = self else {
                 // Handle case where self is nil
-                print("self 为 nil，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                #if DEBUG
+                print("Self is nil, ID: \(imageID), size: \(sizeType.rawValue)")
+                #endif
                 safeCompletion(nil)
                 return
             }
@@ -371,8 +375,6 @@ class ImageManager {
     
 
     
-
-    
     // Clear all original image files
     private func clearAllOriginalImageFiles() -> Bool {
         guard let imagesDirectory = getOriginalImagesDirectoryURL() else { return false }
@@ -400,18 +402,16 @@ class ImageManager {
         defer { operationLock.unlock() }
         
         // 1. Get all image IDs
-        let mediumList = getImageMetadataList(for: .large)
-        let largeList = getImageMetadataList(for: .large)
+        // 仅保留 .large 尺寸，其他尺寸已移除
+        let list = getImageMetadataList(for: .large)
         
-        if mediumList.isEmpty && largeList.isEmpty {
-            print("Clear operation: No images to delete")
-            return true
-        }
-        
-        // 2. Atomically clear metadata
-        var success = true
-        success = success && saveImageMetadataList([], for: .large)
-        success = success && saveImageMetadataList([], for: .large)
+        if list.isEmpty {
+             print("Clear operation: No images to delete")
+             return true
+         }
+         
+         // 2. Atomically clear metadata
+        var success = saveImageMetadataList([], for: .large)
         
         if !success {
             print("Clear failed: Metadata clearing failed")
