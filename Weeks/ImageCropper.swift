@@ -17,7 +17,7 @@ struct ImageCropper {
 
     /// Get aspect ratio – legacy parameter kept for compatibility
     static func aspectRatio(for sizeType: WidgetSizeType) -> CGFloat {
-        return largeAspectRatio // medium 已弃用，统一使用 large 比例 1:1
+        return largeAspectRatio // medium deprecated, unified to use large ratio 1:1
     }
     
     /// Crop image based on Widget size type
