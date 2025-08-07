@@ -30,7 +30,7 @@ struct SmartImageCropper {
         DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds) {
             guard !hasCompleted else { return }
             #if DEBUG
-            print("🔍 SmartCropper: 超时，使用几何中心")
+            print("🔍 SmartCropper: Timeout, using geometric center")
             #endif
             let fallback = cropWithGeometricCenter(image: image)
             safeCompletion(fallback)
@@ -38,7 +38,7 @@ struct SmartImageCropper {
         detectVisualCenter(in: image) { center, method in
             guard !hasCompleted else { return }
             #if DEBUG
-            print("🔍 SmartCropper: 使用 \(method.rawValue) 检测到中心: \(center)")
+            print("🔍 SmartCropper: Using \(method.rawValue) detected center: \(center)")
             #endif
             let cropped = cropImageToSquare(image: image, center: center)
             safeCompletion(cropped)

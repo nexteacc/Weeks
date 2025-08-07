@@ -9,9 +9,9 @@ struct WeeksApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .preferredColorScheme(.light) // 设置 SwiftUI 视图首选明亮模式
+                .preferredColorScheme(.light) // Set SwiftUI view to prefer light mode
                 .onAppear {
-                    // 请求相册权限
+                    // Request photo library permission
                     PHPhotoLibrary.requestAuthorization(for: .readWrite) { status in
                         switch status {
                         case .authorized, .limited:
@@ -25,7 +25,7 @@ struct WeeksApp: App {
                         }
                     }
                     
-                    // 请求通知权限
+                    // Request notification permission
                     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
                         if granted {
                             Logger.info("Notification permission granted", category: .general)
@@ -38,23 +38,23 @@ struct WeeksApp: App {
     }
 }
 
-// 应用代理，处理推送通知注册等
+// App delegate for handling push notification registration etc.
 class AppDelegate: NSObject, UIApplicationDelegate {
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
-        // 注册远程通知
+        // Register for remote notifications
         application.registerForRemoteNotifications()
         return true
     }
     
-    // 处理设备令牌
+    // Handle device token
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         let tokenParts = deviceToken.map { data in String(format: "%02.2hhx", data) }
         let token = tokenParts.joined()
         Logger.info("Device token received: \(token)", category: .general)
-        // 这里可以将令牌发送到您的服务器
+        // Here you can send the token to your server
     }
     
-    // 处理注册失败
+    // Handle registration failure
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
         Logger.error("Failed to register for remote notifications: \(error.localizedDescription)", category: .general)
     }

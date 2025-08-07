@@ -14,7 +14,7 @@ import WidgetKit
 enum WidgetSizeType: String, Codable {
     case large
 
-    // 兼容旧版本：如遇到未知值（如 medium）时回退到 large
+    // Compatibility: fallback to large for unknown values (e.g. deprecated medium)
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let raw = (try? container.decode(String.self)) ?? WidgetSizeType.large.rawValue
@@ -35,7 +35,7 @@ class ImageManager {
     // Singleton pattern
     static let shared = ImageManager()
     
-    // App Group identifier - 与entitlements文件中的ID保持一致
+    // App Group identifier - must match the ID in entitlements file
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
     // Maximum image count limit
@@ -96,21 +96,21 @@ class ImageManager {
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
     }
     
-    // Save image (save independent images for all sizes)
+    // Save image (only saves large size for Widget)
     func saveImage(_ image: UIImage, completion: @escaping (String?) -> Void) {
-        // 使用主队列确保线程安全
+        // Use main queue to ensure thread safety
         DispatchQueue.main.async {
             let group = DispatchGroup()
-            var mediumID: String?
+            var largeID: String?
             
-            // 添加超时保护
-            let timeoutSeconds = 15.0 // 15秒超时
+            // Add timeout protection
+            let timeoutSeconds = 15.0 // 15 seconds timeout
             var hasCompleted = false
             let timeoutWorkItem = DispatchWorkItem {
                 if !hasCompleted {
-                    print("单张图片保存超时")
+                    print("Single image save timeout")
                     hasCompleted = true
-                    completion(mediumID) // 返回已保存的图片ID（如果有）
+                    completion(largeID) // Return saved image ID if any
                 }
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
@@ -118,16 +118,16 @@ class ImageManager {
             // Save image (large size only)
             group.enter()
             self.saveImageWithoutReload(image, for: .large) { id in
-                mediumID = id // 返回 large 尺寸 ID
+                largeID = id // Return large size ID
                 group.leave()
             }
             
             // Wait for all save operations to complete
             group.notify(queue: .main) {
-                // 取消超时任务
+                // Cancel timeout task
                 timeoutWorkItem.cancel()
                 
-                // 标记完成
+                // Mark as completed
                 if !hasCompleted {
                     hasCompleted = true
                     
@@ -136,14 +136,13 @@ class ImageManager {
                         WidgetCenter.shared.reloadAllTimelines()
                         
                         // Add secondary refresh mechanism to ensure Widget updates correctly
-                        // Especially for large size Widgets
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                             WidgetCenter.shared.reloadAllTimelines()
                         }
                     }
                     
-                    // Return medium size image ID (consistent with original logic)
-                    completion(mediumID)
+                    // Return large size image ID
+                    completion(largeID)
                 }
             }
         }
@@ -153,7 +152,7 @@ class ImageManager {
     private func saveOriginalImage(_ image: UIImage, withID imageID: String) {
         guard let originalImagesDirectory = getOriginalImagesDirectoryURL(),
               let imageData = image.jpegData(compressionQuality: 0.9) else {
-            print("保存原始图片失败：无法获取目录或转换图片数据")
+            print("Failed to save original image: unable to get directory or convert image data")
             return
         }
         
@@ -161,9 +160,9 @@ class ImageManager {
         
         do {
             try imageData.write(to: imageURL)
-            print("原始图片保存成功，ID：\(imageID)")
+            print("Original image saved successfully, ID: \(imageID)")
         } catch {
-            print("保存原始图片文件失败：\(error)，ID：\(imageID)")
+            print("Failed to save original image file: \(error), ID: \(imageID)")
         }
     }
     
@@ -173,11 +172,11 @@ class ImageManager {
         for sizeType: WidgetSizeType, 
         completion: @escaping (String?) -> Void
     ) {
-        // 添加方法级别的超时保护
+        // Add method-level timeout protection
         var hasCompleted = false
-        let timeoutSeconds = 10.0 // 10秒超时
+        let timeoutSeconds = 10.0 // 10 seconds timeout
         
-        // 创建安全回调函数，确保只调用一次
+        // Create safe completion function to ensure single call
         let safeCompletion: (String?) -> Void = { result in
             DispatchQueue.main.async {
                 if !hasCompleted {
@@ -187,10 +186,10 @@ class ImageManager {
             }
         }
         
-        // 设置超时
+        // Set timeout
         DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds) {
             if !hasCompleted {
-                print("单张图片裁剪保存超时，尺寸：\(sizeType.rawValue)")
+                print("Single image cropping save timeout, size: \(sizeType.rawValue)")
                 safeCompletion(nil)
             }
         }
@@ -198,21 +197,21 @@ class ImageManager {
         // Check if maximum count limit is reached
         if getImageMetadataList(for: sizeType).count >= maxImageCount {
             // Important: Always call completion handler
-            print("已达到最大图片数量限制：\(maxImageCount)，尺寸：\(sizeType.rawValue)")
+            print("Maximum image count limit reached: \(maxImageCount), size: \(sizeType.rawValue)")
             safeCompletion(nil)
             return
         }
         
         // Generate UUID
         let imageID = UUID().uuidString
-        print("开始处理图片，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+        print("Starting image processing, ID: \(imageID), size: \(sizeType.rawValue)")
         
-        // 保存原始图片（在裁剪前）
+        // Save original image (before cropping)
         saveOriginalImage(image, withID: imageID)
         
         // Use smart cropping
         SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
-            // 检查是否已经完成（可能是由于超时）
+            // Check if already completed (possibly due to timeout)
             if hasCompleted {
                 #if DEBUG
                 print("Smart cropping callback returned but already timed out, ID: \(imageID), size: \(sizeType.rawValue)")
@@ -232,14 +231,14 @@ class ImageManager {
             // Check if we have a valid cropped image
             guard let croppedImage = croppedImage,
                   let imageData = croppedImage.jpegData(compressionQuality: 0.8) else {
-                print("裁剪图片失败或压缩失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                print("Image cropping failed or compression failed, ID: \(imageID), size: \(sizeType.rawValue)")
                 safeCompletion(nil)
                 return
             }
             
             // Get image directory for corresponding size
             guard let imagesDirectory = self.getImagesDirectoryURL(for: sizeType) else {
-                print("获取图片目录失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                print("Failed to get image directory, ID: \(imageID), size: \(sizeType.rawValue)")
                 safeCompletion(nil)
                 return
             }
@@ -254,13 +253,13 @@ class ImageManager {
                       let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
                       let fileSize = fileAttributes[.size] as? Int64,
                       fileSize == imageData.count else {
-                    print("图片文件完整性验证失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                    print("Image file integrity verification failed, ID: \(imageID), size: \(sizeType.rawValue)")
                     safeCompletion(nil)
                     return
                 }
                 
             } catch {
-                print("保存图片文件失败：\(error)，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                print("Failed to save image file: \(error), ID: \(imageID), size: \(sizeType.rawValue)")
                 safeCompletion(nil)
                 return
             }
@@ -277,19 +276,19 @@ class ImageManager {
             
             // Save updated metadata
             guard self.saveImageMetadataList(metadataList, for: sizeType) else {
-                print("保存元数据失败，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+                print("Failed to save metadata, ID: \(imageID), size: \(sizeType.rawValue)")
                 safeCompletion(nil)
                 return
             }
             
-            print("图片处理完成，ID：\(imageID)，尺寸：\(sizeType.rawValue)")
+            print("Image processing completed, ID: \(imageID), size: \(sizeType.rawValue)")
             safeCompletion(imageID)
         }
     }
     
     // Batch save images
     func saveImages(_ images: [UIImage], completion: @escaping ([String]) -> Void) {
-        // 使用主队列确保线程安全
+        // Use main queue to ensure thread safety
         DispatchQueue.main.async {
             let group = DispatchGroup()
             var savedIDs: [String] = []
@@ -311,14 +310,14 @@ class ImageManager {
                 return
             }
             
-            // 添加全局超时保护
-            let timeoutSeconds = 30.0 // 30秒超时
+            // Add global timeout protection
+            let timeoutSeconds = 30.0 // 30 seconds timeout
             var hasCompleted = false
             let timeoutWorkItem = DispatchWorkItem {
                 if !hasCompleted {
-                    print("批量保存图片超时")
+                    print("Batch image save timeout")
                     hasCompleted = true
-                    completion(savedIDs) // 返回已保存的图片ID
+                    completion(savedIDs) // Return saved image IDs
                 }
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeoutSeconds, execute: timeoutWorkItem)
@@ -338,10 +337,10 @@ class ImageManager {
             
             // Wait for all save operations to complete
             group.notify(queue: .main) {
-                // 取消超时任务
+                // Cancel timeout task
                 timeoutWorkItem.cancel()
                 
-                // 标记完成
+                // Mark as completed
                 if !hasCompleted {
                     hasCompleted = true
                     
@@ -352,7 +351,6 @@ class ImageManager {
                             WidgetCenter.shared.reloadAllTimelines()
                             
                             // Add secondary refresh mechanism to ensure Widget updates correctly
-                            // Especially for large size Widgets
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 WidgetCenter.shared.reloadAllTimelines()
                             }
@@ -365,8 +363,7 @@ class ImageManager {
         }
     }
     
-    // 已移除弃用的同步版本函数，请使用带有完成处理程序的异步版本
-    
+
 
     
 
@@ -402,7 +399,7 @@ class ImageManager {
         defer { operationLock.unlock() }
         
         // 1. Get all image IDs
-        // 仅保留 .large 尺寸，其他尺寸已移除
+        // Only .large size is retained, other sizes have been removed
         let list = getImageMetadataList(for: .large)
         
         if list.isEmpty {
@@ -420,8 +417,7 @@ class ImageManager {
         
         // 3. Delete all image files
         success = success && clearAllImageFiles(for: .large)
-        success = success && clearAllImageFiles(for: .large)
-        success = success && clearAllOriginalImageFiles() // 添加清理原始图片
+        success = success && clearAllOriginalImageFiles() // Add clearing original images
         
         if !success {
             print("Clear failed: Image file deletion failed")
@@ -460,8 +456,8 @@ class ImageManager {
     // Get original image by ID
     func getOriginalImage(withID id: String) -> UIImage? {
         guard let originalImagesDirectory = getOriginalImagesDirectoryURL() else {
-            print("无法获取原始图片目录，ID：\(id)")
-            return nil // 直接返回nil，不回退
+            print("Unable to get original image directory, ID: \(id)")
+            return nil // Return nil directly, no fallback
         }
         
         let imageURL = originalImagesDirectory.appendingPathComponent("\(id).jpg")
@@ -469,14 +465,14 @@ class ImageManager {
         guard FileManager.default.fileExists(atPath: imageURL.path),
               let imageData = try? Data(contentsOf: imageURL),
               let image = UIImage(data: imageData) else {
-            print("原始图片不存在或已损坏，ID：\(id)")
-            return nil // 直接返回nil，不回退
+            print("Original image does not exist or is corrupted, ID: \(id)")
+            return nil // Return nil directly, no fallback
         }
         
         return image
     }
     
-    // Get image by ID (default gets medium size)
+    // Get image by ID (default gets large size)
     func getImage(withID id: String) -> UIImage? {
         return getImage(withID: id, for: .large)
     }
@@ -493,7 +489,7 @@ class ImageManager {
         return image
     }
     
-    // Get metadata list (default gets medium size)
+    // Get metadata list (default gets large size)
     func getImageMetadataList() -> [ImageMetadata] {
         return getImageMetadataList(for: .large)
     }
@@ -523,7 +519,7 @@ class ImageManager {
         }
     }
     
-    // Save metadata list (default saves medium size)
+    // Save metadata list (default saves large size)
     func saveImageMetadataList(_ metadataList: [ImageMetadata]) -> Bool {
         return saveImageMetadataList(metadataList, for: .large)
     }
@@ -555,13 +551,13 @@ class ImageManager {
             if let image = getOriginalImage(withID: metadata.id) {
                 result.append((metadata: metadata, image: image))
             }
-            // 不回退到裁剪版本，如果原始图片不存在则跳过
+            // No fallback to cropped version, skip if original image doesn't exist
         }
         
         return result
     }
     
-    // Get all images (in order, default gets medium size)
+    // Get all images (in order, default gets large size)
     func getAllImages() -> [(metadata: ImageMetadata, image: UIImage)] {
         return getAllImages(for: .large)
     }
@@ -580,7 +576,7 @@ class ImageManager {
         return result
     }
     
-    // Get image count (default gets medium size)
+    // Get image count (default gets large size)
     func getImageCount() -> Int {
         return getImageMetadataList().count
     }
@@ -590,7 +586,7 @@ class ImageManager {
         return getImageMetadataList(for: sizeType).count
     }
     
-    // Check if maximum count limit is reached (default checks medium size)
+    // Check if maximum count limit is reached (default checks large size)
     func isMaxImageCountReached() -> Bool {
         return getImageCount() >= maxImageCount
     }

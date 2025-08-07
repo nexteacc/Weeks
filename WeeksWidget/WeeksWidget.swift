@@ -8,11 +8,11 @@
 import WidgetKit
 import SwiftUI
 
-// Widget 尺寸类型枚举（与App中保持一致）
+// Widget size type enumeration (consistent with App)
 enum WidgetSizeType: String, Codable {
     case large
 
-    // 兼容旧版本：如遇到未知值（如 medium）时回退到 large
+    // Compatibility: fallback to large for unknown values (e.g. deprecated medium)
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let raw = (try? container.decode(String.self)) ?? WidgetSizeType.large.rawValue
@@ -20,14 +20,14 @@ enum WidgetSizeType: String, Codable {
     }
 }
 
-// 图片元数据结构（与App中保持一致）
+// Image metadata structure (consistent with App)
 struct ImageMetadata: Codable {
-    let id: String // UUID 字符串
-    let addedDate: Date // 添加时间
-    let order: Int // 顺序号
-    let sizeType: WidgetSizeType? // Widget 尺寸类型，兼容旧版本，可为 nil
+    let id: String // UUID string
+    let addedDate: Date // Date added
+    let order: Int // Order number
+    let sizeType: WidgetSizeType? // Widget size type, compatible with old versions, can be nil
     
-    // 兼容旧版本的初始化方法
+    // Compatibility initialization method
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(String.self, forKey: .id)
@@ -37,30 +37,30 @@ struct ImageMetadata: Codable {
     }
 }
 
-// Widget 时间条目
+// Widget timeline entry
 struct WeeksEntry: TimelineEntry {
     let date: Date
     let imageID: String?
-    let widgetFamily: WidgetFamily // Widget 尺寸
+    let widgetFamily: WidgetFamily // Widget size
 }
 
-// Widget 提供者
+// Widget provider
 struct Provider: TimelineProvider {
-    // App Group 标识符 - 与entitlements文件中的ID保持一致
+    // App Group identifier - must match the ID in entitlements file
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
-    // 获取共享容器 URL
+    // Get shared container URL
     private func getSharedContainerURL() -> URL? {
         return FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier)
     }
     
-    // 获取图片存储目录（根据尺寸类型）
+    // Get image storage directory (by size type)
     private func getImagesDirectoryURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         return containerURL.appendingPathComponent("Images/\(sizeType.rawValue)", isDirectory: true)
     }
     
-    // 获取元数据文件 URL（根据尺寸类型）
+    // Get metadata file URL (by size type)
     private func getMetadataFileURL(for sizeType: WidgetSizeType) -> URL? {
         guard let containerURL = getSharedContainerURL() else { return nil }
         return containerURL.appendingPathComponent("metadata_\(sizeType.rawValue).json")
@@ -68,7 +68,7 @@ struct Provider: TimelineProvider {
     
 
     
-    // 获取指定尺寸的所有图片元数据
+    // Get all image metadata for specified size
     private func getImageMetadataList(for sizeType: WidgetSizeType) -> [ImageMetadata] {
         guard let metadataURL = getMetadataFileURL(for: sizeType) else { 
             return [] 
@@ -89,7 +89,7 @@ struct Provider: TimelineProvider {
     
 
     
-    // 获取指定尺寸的图片 URL
+    // Get image URL for specified size
     private func getImageURL(withID id: String, for sizeType: WidgetSizeType) -> URL? {
         guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else { return nil }
         return imagesDirectory.appendingPathComponent("\(id).jpg")
@@ -97,14 +97,14 @@ struct Provider: TimelineProvider {
     
 
     
-    // 提供占位符条目
+    // Provide placeholder entry
     func placeholder(in context: Context) -> WeeksEntry {
         return WeeksEntry(date: Date(), imageID: nil, widgetFamily: context.family)
     }
 
-    // 提供快照条目
+    // Provide snapshot entry
     func getSnapshot(in context: Context, completion: @escaping (WeeksEntry) -> ()) {
-        // 根据 Widget 尺寸获取对应的元数据列表
+        // Get corresponding metadata list based on Widget size
         let sizeType = getWidgetSizeType(for: context.family)
         let metadataList = getImageMetadataList(for: sizeType)
         
@@ -117,16 +117,16 @@ struct Provider: TimelineProvider {
         }
     }
 
-    // 提供时间线条目
+    // Provide timeline entries
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeeksEntry>) -> ()) {
-        // 根据 Widget 尺寸获取对应的元数据列表
+        // Get corresponding metadata list based on Widget size
         let sizeType = getWidgetSizeType(for: context.family)
         let metadataList = getImageMetadataList(for: sizeType)
         
-        // 验证元数据和文件的一致性
+        // Validate consistency between metadata and files
         let validatedMetadataList = validateImageMetadata(metadataList, for: sizeType)
         
-        // 如果没有图片，返回空条目
+        // If no images, return empty entry
         if validatedMetadataList.isEmpty {
             let entry = WeeksEntry(date: Date(), imageID: nil, widgetFamily: context.family)
             let timeline = Timeline(entries: [entry], policy: .atEnd)
@@ -134,23 +134,23 @@ struct Provider: TimelineProvider {
             return
         }
         
-        // 创建时间线条目
+        // Create timeline entries
         var entries: [WeeksEntry] = []
         let currentDate = Date()
         
-        // 为每张图片创建一个条目，每隔15分钟切换一次
+        // Create an entry for each image, switching every 15 minutes
         for (index, metadata) in validatedMetadataList.enumerated() {
             let entryDate = Calendar.current.date(byAdding: .minute, value: index * 15, to: currentDate)!
             let entry = WeeksEntry(date: entryDate, imageID: metadata.id, widgetFamily: context.family)
             entries.append(entry)
         }
         
-        // 创建时间线，最后一张图片显示完后重新开始
+        // Create timeline, restart after the last image is displayed
         let timeline = Timeline(entries: entries, policy: .atEnd)
         completion(timeline)
     }
     
-    // 验证图片元数据和文件的一致性
+    // Validate consistency between image metadata and files
     private func validateImageMetadata(_ metadataList: [ImageMetadata], for sizeType: WidgetSizeType) -> [ImageMetadata] {
         guard let imagesDirectory = getImagesDirectoryURL(for: sizeType) else {
             return []
@@ -170,18 +170,18 @@ struct Provider: TimelineProvider {
         return validatedList
     }
     
-    // 根据 WidgetFamily 获取对应的 WidgetSizeType
+    // Get corresponding WidgetSizeType based on WidgetFamily
     private func getWidgetSizeType(for family: WidgetFamily) -> WidgetSizeType {
         switch family {
         case .systemLarge:
             return .large
-        default: // 统一使用 large 尺寸
+        default: // Unified use of large size
             return .large
         }
     }
 }
 
-// Widget 定义
+// Widget definition
 struct WeeksWidget: Widget {
     let kind: String = "WeeksWidget"
     
@@ -195,32 +195,32 @@ struct WeeksWidget: Widget {
     }
 }
 
-// Widget 视图
+// Widget view
 struct WeeksWidgetEntryView : View {
     var entry: Provider.Entry
     @Environment(\.redactionReasons) private var redactionReasons
     
-    // App Group 标识符 - 与entitlements文件中的ID保持一致
+    // App Group identifier - must match the ID in entitlements file
     private let appGroupIdentifier = "group.com.nextbigtoy.weeks"
     
-    // 获取图片（根据 Widget 尺寸加载对应的图片）
+    // Get image (load corresponding image based on Widget size)
     private func loadImage(withID id: String) -> UIImage? {
-        // 根据 Widget 尺寸获取对应的尺寸类型
+        // Get corresponding size type based on Widget size
         let sizeType = getWidgetSizeType(for: entry.widgetFamily)
         return loadImage(withID: id, for: sizeType)
     }
     
-    // 根据 WidgetFamily 获取对应的 WidgetSizeType
+    // Get corresponding WidgetSizeType based on WidgetFamily
     private func getWidgetSizeType(for family: WidgetFamily) -> WidgetSizeType {
         switch family {
         case .systemLarge:
             return .large
-        default: // 统一使用 large 尺寸
+        default: // Unified use of large size
             return .large
         }
     }
     
-    // 获取指定尺寸的图片
+    // Get image for specified size
     private func loadImage(withID id: String, for sizeType: WidgetSizeType) -> UIImage? {
         guard let containerURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupIdentifier) else {
             return nil
@@ -229,25 +229,25 @@ struct WeeksWidgetEntryView : View {
         let imagesDirectory = containerURL.appendingPathComponent("Images/\(sizeType.rawValue)")
         let imageURL = imagesDirectory.appendingPathComponent("\(id).jpg")
         
-        // 检查文件是否存在
+        // Check if file exists
         guard FileManager.default.fileExists(atPath: imageURL.path) else {
             return nil
         }
         
-        // 验证文件完整性：检查文件大小和可读性
+        // Verify file integrity: check file size and readability
         guard let fileAttributes = try? FileManager.default.attributesOfItem(atPath: imageURL.path),
               let fileSize = fileAttributes[.size] as? Int64,
               fileSize > 0 else {
             return nil
         }
         
-        // 尝试读取文件数据
+        // Try to read file data
         guard let imageData = try? Data(contentsOf: imageURL),
               imageData.count > 0 else {
             return nil
         }
         
-        // 验证数据完整性：确保可以创建UIImage
+        // Verify data integrity: ensure UIImage can be created
         guard let image = UIImage(data: imageData) else {
             return nil
         }
@@ -257,7 +257,7 @@ struct WeeksWidgetEntryView : View {
     
     var body: some View {
         ZStack {
-            // 无图片时显示提示
+            // Show prompt when no images
             if entry.imageID == nil {
                 VStack(spacing: 10) {
                     Image(systemName: "photo")
@@ -269,8 +269,8 @@ struct WeeksWidgetEntryView : View {
                         .foregroundColor(.white.opacity(0.8))
                 }
             } else if entry.widgetFamily == .systemLarge {
-                // 大尺寸 Widget 布局 - 移除时间信息展示
-                // 保持空布局，只显示图片
+                // Large Widget layout - removed time information display
+                // Keep empty layout, only show image
                 EmptyView()
             }
         }
