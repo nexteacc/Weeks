@@ -86,7 +86,7 @@ struct SmartImageCropper {
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try handler.perform([request])
-                guard let best = (request.results as? [VNFaceObservation])?.max(by: { $0.boundingBox.width < $1.boundingBox.width }) else {
+                guard let best = request.results?.max(by: { $0.boundingBox.width < $1.boundingBox.width }) else {
                     completion(nil); return
                 }
                 let center = convert(rect: best.boundingBox, processedSize: processed.size, originalSize: original.size)

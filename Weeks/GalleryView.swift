@@ -11,6 +11,7 @@ import PhotosUI
 struct GalleryView: View {
     
     @Binding var uiImages: [UIImage]
+    @State private var imageData: [(metadata: ImageMetadata, image: UIImage)] = []
     
     @State private var selectedItems: [PhotosPickerItem] = []
     @State private var isPawAnimating = false
@@ -19,6 +20,10 @@ struct GalleryView: View {
     @State private var remainingWeeks: Int = 0
     @State private var updateTimer: Timer? = nil
     @Environment(\.dismiss) private var dismiss
+    
+    // Delete functionality state
+    @State private var showDeleteConfirmation = false
+    @State private var imageToDelete: (id: String, image: UIImage)? = nil
     
     // Calculate remaining weeks in the year (full weeks + partial week)
     private func calculateRemainingWeeks() -> Int {
@@ -161,8 +166,16 @@ struct GalleryView: View {
                         // Middle area: Image scrolling section
                         ScrollView {
                             VStack(spacing: 0) {
-                                ForEach(Array(uiImages.enumerated()), id: \.offset) { (index, img) in
-                                     GalleryImageCard(image: img, index: index)
+                                ForEach(Array(imageData.enumerated()), id: \.offset) { (index, data) in
+                                     GalleryImageCard(
+                                        image: data.image, 
+                                        index: index, 
+                                        imageID: data.metadata.id
+                                     ) {
+                                         // Delete callback
+                                         imageToDelete = (id: data.metadata.id, image: data.image)
+                                         showDeleteConfirmation = true
+                                     }
                                 }
                             }
                             .padding(.vertical, 20)
@@ -248,8 +261,9 @@ struct GalleryView: View {
                 
                 // Sync all images when page loads - use original images
                 DispatchQueue.main.async {
-                    let all = ImageManager.shared.getAllOriginalImages().map { $0.image }
-                    uiImages = all
+                    let allData = ImageManager.shared.getAllOriginalImages()
+                    imageData = allData
+                    uiImages = allData.map { $0.image }
                     
                     // 如果没有加载到任何图片但元数据存在，可以记录日志
                     if uiImages.isEmpty && !ImageManager.shared.getImageMetadataList().isEmpty {
@@ -261,6 +275,30 @@ struct GalleryView: View {
                 // Clean up timer when view disappears
                 updateTimer?.invalidate()
                 updateTimer = nil
+            }
+            .alert("Delete Photo?", isPresented: $showDeleteConfirmation) {
+                Button("Cancel", role: .cancel) {
+                    imageToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let imageToDelete = imageToDelete {
+                        let success = ImageManager.shared.deleteImage(withID: imageToDelete.id)
+                        if success {
+                            // Refresh image data
+                            let allData = ImageManager.shared.getAllOriginalImages()
+                            imageData = allData
+                            uiImages = allData.map { $0.image }
+                            
+                            // If no images left, dismiss the gallery
+                            if allData.isEmpty {
+                                DispatchQueue.main.async {
+                                    dismiss()
+                                }
+                            }
+                        }
+                    }
+                    self.imageToDelete = nil
+                }
             }
             .onChange(of: selectedItems) {
                 Task {
@@ -276,8 +314,9 @@ struct GalleryView: View {
                         ImageManager.shared.saveImages(results) { savedIDs in
                             // Refresh all images - use original images
                             DispatchQueue.main.async {
-                                let all = ImageManager.shared.getAllOriginalImages().map { $0.image }
-                                uiImages = all
+                                let allData = ImageManager.shared.getAllOriginalImages()
+                                imageData = allData
+                                uiImages = allData.map { $0.image }
                             }
                         }
                     }
@@ -292,6 +331,8 @@ struct GalleryView: View {
 struct GalleryImageCard: View {
     let image: UIImage
     let index: Int
+    let imageID: String
+    let onDelete: () -> Void
     
     var body: some View {
         GeometryReader { geo in
@@ -338,6 +379,14 @@ struct GalleryImageCard: View {
             .scaleEffect(scale)
             .shadow(radius: 6)
             .zIndex(zIndex)
+            .onLongPressGesture(minimumDuration: 0.6) {
+                // Trigger haptic feedback
+                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                impactFeedback.impactOccurred()
+                
+                // Trigger delete callback
+                onDelete()
+            }
         }
         .frame(height: 180)
         .padding(.horizontal)

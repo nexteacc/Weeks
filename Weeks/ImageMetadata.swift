@@ -391,6 +391,71 @@ class ImageManager {
         }
     }
     
+    // Delete single image by ID
+    func deleteImage(withID imageID: String) -> Bool {
+        // Use operation lock to ensure atomicity
+        let operationLock = NSLock()
+        operationLock.lock()
+        defer { operationLock.unlock() }
+        
+        // 1. Get current metadata list
+        var metadataList = getImageMetadataList(for: .large)
+        
+        // 2. Find and remove the target image metadata
+        guard let index = metadataList.firstIndex(where: { $0.id == imageID }) else {
+            print("Delete failed: Image with ID \(imageID) not found in metadata")
+            return false
+        }
+        
+        metadataList.remove(at: index)
+        
+        // 3. Update metadata file
+        guard saveImageMetadataList(metadataList, for: .large) else {
+            print("Delete failed: Could not update metadata")
+            return false
+        }
+        
+        // 4. Delete image files
+        var success = true
+        
+        // Delete cropped image file
+        if let imagesDirectory = getImagesDirectoryURL(for: .large) {
+            let imageURL = imagesDirectory.appendingPathComponent("\(imageID).jpg")
+            if FileManager.default.fileExists(atPath: imageURL.path) {
+                do {
+                    try FileManager.default.removeItem(at: imageURL)
+                    print("Successfully deleted cropped image file: \(imageID)")
+                } catch {
+                    print("Failed to delete cropped image file: \(error)")
+                    success = false
+                }
+            }
+        }
+        
+        // Delete original image file
+        if let originalImagesDirectory = getOriginalImagesDirectoryURL() {
+            let originalImageURL = originalImagesDirectory.appendingPathComponent("\(imageID).jpg")
+            if FileManager.default.fileExists(atPath: originalImageURL.path) {
+                do {
+                    try FileManager.default.removeItem(at: originalImageURL)
+                    print("Successfully deleted original image file: \(imageID)")
+                } catch {
+                    print("Failed to delete original image file: \(error)")
+                    success = false
+                }
+            }
+        }
+        
+        // 5. Refresh Widget
+        if success {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
+        
+        return success
+    }
+    
     // Clear all images (clear images of all sizes) - atomic operation version
     func clearAllImages() -> Bool {
         // Use operation lock to ensure atomicity
