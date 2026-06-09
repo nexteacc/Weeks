@@ -124,6 +124,14 @@ struct ContentView: View {
 
                 stopAutoPlay()
             }
+            .onOpenURL { url in
+                guard url.scheme == "weeksWidget" else { return }
+
+                let all = ImageManager.shared.getAllImages().map { $0.image }
+                uiImages = all
+                hasAddedImages = !all.isEmpty
+                navigateToGallery = !all.isEmpty
+            }
             .onChange(of: selectedItems) { _, _ in
                 Task {
                     var results: [UIImage] = []
@@ -174,4 +182,3 @@ struct ContentView: View {
         autoPlayTimer = nil
     }
 }
-

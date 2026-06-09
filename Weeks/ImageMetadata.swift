@@ -40,6 +40,9 @@ class ImageManager {
     
     // Maximum image count limit
     private let maxImageCount = 30
+
+    // Serializes metadata and image file mutations across save/delete/clear.
+    private let operationLock = NSLock()
     
     // Private initialization method
     private init() {}
@@ -206,9 +209,6 @@ class ImageManager {
         let imageID = UUID().uuidString
         print("Starting image processing, ID: \(imageID), size: \(sizeType.rawValue)")
         
-        // Save original image (before cropping)
-        saveOriginalImage(image, withID: imageID)
-        
         // Use smart cropping
         SmartImageCropper.smartCrop(image: image, for: sizeType, strategy: .hybrid) { [weak self] croppedImage in
             // Check if already completed (possibly due to timeout)
@@ -236,6 +236,16 @@ class ImageManager {
                 return
             }
             
+            self.operationLock.lock()
+            defer { self.operationLock.unlock() }
+
+            var metadataList = self.getImageMetadataList(for: sizeType)
+            guard metadataList.count < self.maxImageCount else {
+                print("Maximum image count limit reached during save: \(self.maxImageCount), size: \(sizeType.rawValue)")
+                safeCompletion(nil)
+                return
+            }
+
             // Get image directory for corresponding size
             guard let imagesDirectory = self.getImagesDirectoryURL(for: sizeType) else {
                 print("Failed to get image directory, ID: \(imageID), size: \(sizeType.rawValue)")
@@ -263,9 +273,11 @@ class ImageManager {
                 safeCompletion(nil)
                 return
             }
+
+            // Save original image after the cropped image succeeds, keeping files and metadata together.
+            self.saveOriginalImage(image, withID: imageID)
             
             // Update metadata
-            var metadataList = self.getImageMetadataList(for: sizeType)
             let newMetadata = ImageMetadata(
                 id: imageID,
                 addedDate: Date(),
@@ -393,8 +405,6 @@ class ImageManager {
     
     // Delete single image by ID
     func deleteImage(withID imageID: String) -> Bool {
-        // Use operation lock to ensure atomicity
-        let operationLock = NSLock()
         operationLock.lock()
         defer { operationLock.unlock() }
         
@@ -458,8 +468,6 @@ class ImageManager {
     
     // Clear all images (clear images of all sizes) - atomic operation version
     func clearAllImages() -> Bool {
-        // Use operation lock to ensure atomicity
-        let operationLock = NSLock()
         operationLock.lock()
         defer { operationLock.unlock() }
         

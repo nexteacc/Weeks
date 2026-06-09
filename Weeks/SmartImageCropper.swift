@@ -11,13 +11,26 @@ struct SmartImageCropper {
     }
 
     static func smartCrop(image: UIImage, completion: @escaping (UIImage?) -> Void) {
-        cropToSquare(image: image, completion: completion)
+        cropToSquare(image: normalizedUp(image), completion: completion)
     }
 
     static func smartCrop(image: UIImage, for sizeType: WidgetSizeType, strategy: CropStrategy = .hybrid, completion: @escaping (UIImage?) -> Void) {
-        cropToSquare(image: image, completion: completion)
+        cropToSquare(image: normalizedUp(image), completion: completion)
     }
     private static let timeoutSeconds: TimeInterval = 6.0
+
+    private static func normalizedUp(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+
+        let rendererFormat = UIGraphicsImageRendererFormat.default()
+        rendererFormat.scale = image.scale
+        rendererFormat.opaque = false
+
+        return UIGraphicsImageRenderer(size: image.size, format: rendererFormat).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: image.size))
+        }
+    }
+
     private static func cropToSquare(image: UIImage, completion: @escaping (UIImage?) -> Void) {
         var hasCompleted = false
         let safeCompletion: (UIImage?) -> Void = { result in
@@ -37,10 +50,11 @@ struct SmartImageCropper {
         }
         detectVisualCenter(in: image) { center, method in
             guard !hasCompleted else { return }
+            let normalizedCenter = normalizedCropCenter(center, in: image)
             #if DEBUG
-            print("🔍 SmartCropper: Using \(method.rawValue) detected center: \(center)")
+            print("🔍 SmartCropper: Using \(method.rawValue) detected center: \(normalizedCenter)")
             #endif
-            let cropped = cropImageToSquare(image: image, center: center)
+            let cropped = cropImageToSquare(image: image, center: normalizedCenter)
             safeCompletion(cropped)
         }
     }
@@ -137,13 +151,28 @@ struct SmartImageCropper {
     private static func cropImageToSquare(image: UIImage, center: CGPoint) -> UIImage? {
         let square = min(image.size.width, image.size.height)
         let half = square / 2
-        let clampedX = max(half, min(image.size.width - half, center.x))
-        let clampedY = max(half, min(image.size.height - half, center.y))
-        let origin = CGPoint(x: clampedX - half, y: clampedY - half)
+        let normalizedCenter = normalizedCropCenter(center, in: image)
+        let origin = CGPoint(x: normalizedCenter.x - half, y: normalizedCenter.y - half)
         let rect = CGRect(origin: origin, size: CGSize(width: square, height: square)).integral
         guard let cg = image.cgImage?.cropping(to: rect.applying(CGAffineTransform(scaleX: image.scale, y: image.scale))) else { return nil }
-        let cropped = UIImage(cgImage: cg, scale: image.scale, orientation: image.imageOrientation)
+        let cropped = UIImage(cgImage: cg, scale: image.scale, orientation: .up)
         return ImageCropper.resizeForWidget(cropped, targetRatio: 1.0)
+    }
+
+    private static func normalizedCropCenter(_ center: CGPoint, in image: UIImage) -> CGPoint {
+        let square = min(image.size.width, image.size.height)
+        guard square > 0 else { return center }
+
+        let half = square / 2
+        let minX = half
+        let maxX = max(half, image.size.width - half)
+        let minY = half
+        let maxY = max(half, image.size.height - half)
+
+        return CGPoint(
+            x: max(minX, min(maxX, center.x)),
+            y: max(minY, min(maxY, center.y))
+        )
     }
 
     private static func convert(rect: CGRect, processedSize: CGSize, originalSize: CGSize) -> CGPoint {

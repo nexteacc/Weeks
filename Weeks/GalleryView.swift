@@ -54,7 +54,7 @@ struct GalleryView: View {
         
         // Calculate days from next week start to year end
         let nextWeekStart = calendar.date(byAdding: .second, value: 1, to: weekEnd)!
-        let daysFromNextWeek = calendar.dateComponents([.day], from: nextWeekStart, to: lastDay).day ?? 0 + 1
+        let daysFromNextWeek = (calendar.dateComponents([.day], from: nextWeekStart, to: lastDay).day ?? 0) + 1
         
         // Calculate full weeks and remaining days
         let fullWeeks = daysFromNextWeek / 7
